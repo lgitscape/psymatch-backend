@@ -5,6 +5,7 @@
 fastapi>=0.110
 uvicorn[standard]>=0.27
 pydantic>=2.7
+pydantic-settings
 numpy>=1.26
 pandas>=2.2
 lightgbm>=4.3          # LambdaRank scorer

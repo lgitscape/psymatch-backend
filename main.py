@@ -17,7 +17,8 @@ import numpy as np  # type: ignore
 import pandas as pd  # type: ignore
 from fastapi import FastAPI, BackgroundTasks, HTTPException
 from lightgbm import LGBMRanker  # type: ignore
-from pydantic import BaseModel, BaseSettings
+from pydantic import BaseModel
+from pydantic_settings import BaseSettings
 from prometheus_client import Counter, Histogram, Gauge, start_http_server
 from structlog import get_logger
 
