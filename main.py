@@ -246,7 +246,7 @@ def log_match_recommendation(cli: ClientProfile, ths: List[TherapistProfile], re
     } for i, (t, s) in enumerate(res)]
 
     row = {
-        "client_id": cli.client_id,  # voeg toe aan ClientProfile!
+        "client_id": str(cli.client_id),
         "algorithm": "rule",  # of "lambdarank-v1"
         "recommended": match_data,
 	"feature_vector": features_df.drop(columns=["th_idx"]).iloc[0].dropna().to_dict(),
