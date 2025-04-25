@@ -146,7 +146,8 @@ def _build_features(cli: ClientProfile, ths: List[TherapistProfile]) -> pd.DataF
         # fee logic
         fee_rel = cli.budget is not None and not th.contract_with_insurer
         fee_delta = (cli.budget - th.fee) if fee_rel else 0.0
-        fee_score = 1.0 if fee_rel and fee_delta >= 0 else (0.5 if fee_rel and fee_delta >= -20 else 0.0)
+	fee_score = 1.0 if fee_rel and fee_delta >= 0 else (0.5 if fee_rel and fee_delta >= -20 else 0.0)
+        budget_penalty = -1.0 if fee_rel and fee_delta < 0 else 0.0
         # gender preference
         gender_ok = 1.0 if (cli.gender_pref in (None, "Geen voorkeur") or cli.gender_pref == th.gender_pref) else 0.0
         # therapy goal overlap
@@ -165,6 +166,7 @@ def _build_features(cli: ClientProfile, ths: List[TherapistProfile]) -> pd.DataF
             "timeslot_overlap": float(len(set(cli.timeslots) & set(th.timeslots))),
             "fee_score": fee_score,
             "fee_delta": fee_delta,
+	    "budget_penalty": budget_penalty,
             "gender_ok": gender_ok,
             "goal_overlap": goal_overlap,
             "modality_overlap": modality_overlap,
