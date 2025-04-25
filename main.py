@@ -229,7 +229,8 @@ def _recommend(cli: ClientProfile, ths: List[TherapistProfile], top_n: int = 10)
     feat["score"] = scores
     ranked = feat.sort_values("score", ascending=False)
     id2 = {t.id: t for t in ths}
-    res = [(id2[r.th_idx], r.score) for r in ranked.itertuples()][:top_n]
+    MAX_SCORE = sum(abs(w) for w in RULE_W.values())
+    res = [(id2[r.th_idx], round((r.score / MAX_SCORE) * 100, 2)) for r in ranked.itertuples()][:top_n]
     _update_dp(res)
     log_match_recommendation(cli, ths, res, feat)
     return res
