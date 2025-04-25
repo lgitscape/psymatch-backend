@@ -272,7 +272,40 @@ else:
 # ───────────────────────── 7. FastAPI app ────────────────────────────────
 app = FastAPI(title="PsyMatch Recommender v5.4.2")
 
-THERAPISTS: List[TherapistProfile] = []  # TODO: replace with DB fetch
+THERAPISTS: List[TherapistProfile] = [
+    TherapistProfile(
+        id="th1",
+        setting="online",
+        modalities=["ACT"],
+        topics=["stress", "zelfbeeld"],
+        client_groups=["Jongvolwassene", "Expat"],
+        style="Warm",
+        therapist_goals=["inzicht bieden", "zelfbeeld versterken"],
+        languages=["nl"],
+        timeslots=["avond"],
+        fee=90.0,
+        contract_with_insurer=False,
+        gender_pref="Vrouw",
+        lat=52.01,
+        lon=4.41
+    ),
+    TherapistProfile(
+        id="th2",
+        setting="online",
+        modalities=["CGT"],
+        topics=["stress", "angst"],
+        client_groups=["Volwassenen"],
+        style="Direct",
+        therapist_goals=["mensen in beweging brengen"],
+        languages=["nl", "en"],
+        timeslots=["avond", "ochtend"],
+        fee=100.0,
+        contract_with_insurer=False,
+        gender_pref="Geen voorkeur",
+        lat=52.05,
+        lon=4.5
+    )
+]
 
 @app.on_event("startup")
 async def _startup() -> None:
