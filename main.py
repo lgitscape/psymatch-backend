@@ -166,7 +166,7 @@ def _build_features(cli: ClientProfile, ths: List[TherapistProfile]) -> pd.DataF
             "timeslot_overlap": float(len(set(cli.timeslots) & set(th.timeslots))),
             "fee_score": fee_score,
             "fee_delta": fee_delta,
-	    "budget_penalty": budget_penalty,
+            "budget_penalty": budget_penalty,
             "gender_ok": gender_ok,
             "goal_overlap": goal_overlap,
             "modality_overlap": modality_overlap,
