@@ -1,0 +1,30 @@
+# PsyMatch – Production dependencies
+# =================================
+
+# --- Core runtime ---
+fastapi>=0.110
+uvicorn[standard]>=0.27
+pydantic>=2.7
+numpy>=1.26
+pandas>=2.2
+lightgbm>=4.3          # LambdaRank scorer
+structlog>=24.1
+prometheus_client>=0.20
+supabase>=2.0.0
+
+# --- Approximate Nearest Neighbour ---
+faiss-cpu>=1.8         # ANN acceleration (use faiss-gpu on CUDA machines)
+
+# --- Explainability ---
+shap>=0.45             # SHAP for explainability endpoint
+
+# --- SRS automation ---
+celery[redis]>=5.3     # Celery for background SRS tasks
+
+# --- Model registry ---
+mlflow>=2.12           # MLflow for hot-reload LambdaRank model
+
+# --- Testing / CI ---
+pytest>=8.2            # Test runner
+requests>=2.31         # HTTP testing via TestClient
+
