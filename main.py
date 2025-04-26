@@ -107,7 +107,6 @@ RULE_W: Dict[str, float] = {
     "budget_penalty": -1.0,
     "gender_ok": 0.5,
     "goal_overlap": 1.5,
-    "modality_overlap": 1.0,
     "client_group_ok": 1.0,
     "severity": 0.2,
     "distance_km": -0.01,
@@ -141,6 +140,16 @@ def _build_features(cli: ClientProfile, ths: List[TherapistProfile]) -> pd.DataF
             dist = _haversine_km(cli.lat, cli.lon, th.lat, th.lon)
             if dist > cli.max_km:
                 continue
+	# language overlap
+        if not set(cli.languages) & set(th.languages):
+            continue
+	# topic overlap
+	if not set(cli.topics) & set(th.topics):
+            continue
+	# budget hard filter
+        if cli.budget is not None and not th.contract_with_insurer:
+            if th.fee > cli.budget + 50:
+                continue 
         # weighted topic overlap
         wto = sum(cli.topic_weights.get(t, 1) for t in c_topics & set(th.topics)) / total
         # fee logic
@@ -152,8 +161,6 @@ def _build_features(cli: ClientProfile, ths: List[TherapistProfile]) -> pd.DataF
         gender_ok = 1.0 if (cli.gender_pref in (None, "Geen voorkeur") or cli.gender_pref == th.gender_pref) else 0.0
         # therapy goal overlap
         goal_overlap = float(len(c_goals & set(th.therapist_goals)) / max(1, len(c_goals)))
-        # modality overlap
-        modality_overlap = float(bool(c_mods & set(th.modalities)))
         # client group match
         client_group_ok = float(bool(c_traits & set(th.client_groups))) if c_traits else 1.0
 
@@ -169,7 +176,6 @@ def _build_features(cli: ClientProfile, ths: List[TherapistProfile]) -> pd.DataF
             "budget_penalty": budget_penalty,
             "gender_ok": gender_ok,
             "goal_overlap": goal_overlap,
-            "modality_overlap": modality_overlap,
             "client_group_ok": client_group_ok,
             "severity": float(cli.severity),
             "distance_km": dist,
@@ -254,6 +260,8 @@ def log_match_recommendation(cli: ClientProfile, ths: List[TherapistProfile], re
         "algorithm": "rule",  # of "lambdarank-v1"
         "recommended": match_data,
 	"feature_vector": features_df.drop(columns=["th_idx"]).iloc[0].dropna().to_dict(),
+        "top_match_id": top_match["therapist_id"] if top_match else None,
+        "top_match_score": top_match["score"] if top_match else None,
     }
     supabase.table("match_logs").insert(row).execute()
 
@@ -357,6 +365,12 @@ async def match_start_ep(mid: int, client_email: str, bg: BackgroundTasks):
         raise HTTPException(status_code=501, detail="Celery not configured")
     token = str(uuid.uuid4())
     link = f"https://psymatch.nl/srs/{token}"
+
+@app.post("/match/{match_id}/choose/{therapist_id}")
+async def choose_match(match_id: str, therapist_id: str):
+    """Slaat de door de cliënt gekozen therapeut op in match_logs."""
+    supabase.table("match_logs").update({"chosen_match_id": therapist_id}).eq("id", match_id).execute()
+    return {"status": "chosen"}
 
 if __name__ == "__main__":
     import uvicorn
