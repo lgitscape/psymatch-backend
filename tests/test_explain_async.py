@@ -18,3 +18,4 @@ async def test_explain_async_non_blocking():
         "style_pref": "Warm",
         "style_weight": 4,
         "gender_pref": "Geen voorkeur",
+    }
