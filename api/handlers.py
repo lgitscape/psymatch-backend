@@ -26,6 +26,8 @@ import pandas as pd
 from engine.features import build_feature_vector
 import shap
 import asyncio
+from scripts.setup_training_data import main as setup_training_data
+from scripts.retrain_model import main as retrain_model_main
 
 log = structlog.get_logger()
 
@@ -178,3 +180,20 @@ async def retrain_model():
     log.info("Retraining pipeline triggered (future real pipeline).")
     await asyncio.sleep(1)  # simulate some work
     return {"status": "success", "message": "Retraining pipeline started (mock)."}
+
+# ─────────────────────────────────────────────────────────────
+# Admin Endpoints
+# ─────────────────────────────────────────────────────────────
+
+@router.post("/admin/setup-training-data")
+async def admin_setup_training_data():
+    """Genereer fake therapists en training matches in Supabase."""
+    setup_training_data()
+    return {"status": "setup complete"}
+
+@router.post("/admin/train-model")
+async def admin_train_model():
+    """Train LambdaRank model op Supabase-data en sla op."""
+    retrain_model_main()
+    return {"status": "model trained"}
+
