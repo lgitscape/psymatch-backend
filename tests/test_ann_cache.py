@@ -7,6 +7,7 @@ from engine.matcher import Matcher
 class DummyClient:
     def __init__(self):
         self.topics = ["stress"]
+        self.setting = "online"
         self.topic_weights = {"stress": 3}
         self.style_pref = "Warm"
         self.style_weight = 2
