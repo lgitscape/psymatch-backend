@@ -197,3 +197,10 @@ async def admin_train_model():
     retrain_model_main()
     return {"status": "model trained"}
 
+from engine.models import init_lambda_model
+
+@router.post("/admin/reload-model")
+async def admin_reload_model():
+    """Reload het nieuw getrainde LambdaRank model in het geheugen."""
+    init_lambda_model("models/latest_model.txt")
+    return {"status": "model reloaded"}
