@@ -27,7 +27,7 @@ from engine.features import build_feature_vector
 import shap
 import asyncio
 from scripts.setup_training_data import main as setup_training_data
-from scripts.retrain_model import main as retrain_model_main
+from scripts.train_model import main as train_model_main
 
 log = structlog.get_logger()
 
@@ -194,7 +194,7 @@ async def admin_setup_training_data():
 @router.post("/admin/train-model")
 async def admin_train_model():
     """Train LambdaRank model op Supabase-data en sla op."""
-    retrain_model_main()
+    train_model_main()
     return {"status": "model trained"}
 
 from engine.models import init_lambda_model
