@@ -30,17 +30,16 @@ settings = Settings()
 # ─────────────────────────────
 # Prometheus monitoring
 
-if "psymatch_requests" not in REGISTRY._names:
-    REQUEST_COUNTER = Counter("psymatch_requests", "Total /recommend requests made")
+metric_names = [
+    ("psymatch_requests", "Total /recommend requests made"),
+    ("psymatch_fallbacks", "Total number of fallbacks to rule-based scoring"),
+    ("psymatch_matches_returned", "Number of matches returned per request"),
+    ("psymatch_matches_filtered_out", "Number of matches filtered out under minimum score"),
+]
 
-if "psymatch_fallbacks" not in REGISTRY._names:
-    FALLBACK_COUNTER = Counter("psymatch_fallbacks", "Total number of fallbacks to rule-based scoring")
-
-if "psymatch_matches_returned" not in REGISTRY._names:
-    MATCHES_RETURNED_COUNTER = Counter("psymatch_matches_returned", "Number of matches returned per request")
-
-if "psymatch_matches_filtered_out" not in REGISTRY._names:
-    FILTERED_OUT_COUNTER = Counter("psymatch_matches_filtered_out", "Number of matches filtered out under minimum score")
+for name, description in metric_names:
+    if name not in REGISTRY._names:
+        globals()[name.upper()] = Counter(name, description)
 
 # ─────────────────────────────
 # Dummy therapist list (later replace with DB fetch)
