@@ -41,7 +41,7 @@ class DummyTherapist:
         self.lat = 52.01
         self.lon = 4.41
 
-@@pytest.mark.asyncio
+@pytest.mark.asyncio
 async def test_ann_cache_refresh():
     client = DummyClient()
     therapists = [DummyTherapist(str(i)) for i in range(3000)]
