@@ -30,17 +30,21 @@ settings = Settings()
 # ─────────────────────────────
 # Prometheus monitoring
 
-metric_names = [
+# Define the metrics you want to create
+metric_definitions = [
     ("psymatch_requests", "Total /recommend requests made"),
     ("psymatch_fallbacks", "Total number of fallbacks to rule-based scoring"),
     ("psymatch_matches_returned", "Number of matches returned per request"),
     ("psymatch_matches_filtered_out", "Number of matches filtered out under minimum score"),
 ]
 
-for name, description in metric_names:
-    if name not in REGISTRY._names:
-        globals()[name.upper()] = Counter(name, description)
+# Get all existing metric names safely
+existing_metrics = set(metric.name for metric in REGISTRY.collect())
 
+# Register counters if they don't exist yet
+for name, description in metric_definitions:
+    if name not in existing_metrics:
+        globals()[name.upper()] = Counter(name, description)
 # ─────────────────────────────
 # Dummy therapist list (later replace with DB fetch)
 THERAPISTS = []
