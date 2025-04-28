@@ -4,7 +4,6 @@ import random
 import uuid
 import time
 
-import pandas as pd
 from supabase_client import supabase
 from engine.features import build_feature_vector
 
@@ -42,73 +41,109 @@ def generate_fake_therapists(n=50):
         raise RuntimeError(f"Failed to insert therapists: {resp.data}")
     print("Therapists succesvol geüpload.")
 
-    return [th["id"] for th in therapists]
-
-
-# ───────────────────────────────────────────────────────────────────────────
-# Stap B: Dummy client definiëren
-# ───────────────────────────────────────────────────────────────────────────
-def make_dummy_client():
-    class Client:
-        client_id      = uuid.uuid4()
-        setting        = "online"
-        max_km         = 50
-        topics         = ["stress", "angst"]
-        topic_weights  = {"stress": 2, "angst": 1}
-        style_pref     = "Warm"
-        style_weight   = 3
-        gender_pref    = None
-        therapy_goals  = ["stabiliseren"]
-        client_traits  = ["Volwassenen"]
-        languages      = ["nl"]
-        timeslots      = ["ochtend", "avond"]
-        budget         = 100.0
-        severity       = 3
-        lat            = 52.0
-        lon            = 4.0
-    return Client()
-
+    return therapists
 
 # ───────────────────────────────────────────────────────────────────────────
-# Stap C: 2000 match-records genereren en uploaden naar test_training_data
+# Stap B: 50 fake clients genereren en uploaden naar test_clients
 # ───────────────────────────────────────────────────────────────────────────
-def generate_and_upload_matches(client, therapist_ids, n_matches=2000):
+def generate_fake_clients(n=50):
+    topics_pool    = ["stress", "depressie", "angst", "relatie", "verlies"]
+    styles         = ["Warm", "Direct", "Reflectief", "Praktisch"]
+    timeslots_pool = ["ochtend", "middag", "avond"]
+    client_groups_pool = ["Kinderen", "Adolescenten", "Volwassenen", "Ouderen"]
+    languages_pool = ["nl", "en"]
+    genders = ["Man", "Vrouw", None]
+    expat_status = [True, False]
+    lgbtqia_status = [True, False]
+
+    clients = []
+    for _ in range(n):
+        cl = {
+            "id": str(uuid.uuid4()),
+            "setting": "online",
+            "max_km": random.choice([10, 25, 50]),
+            "topics": random.sample(topics_pool, k=random.randint(1, 2)),
+            "topic_weights": {topic: random.randint(1, 3) for topic in random.sample(topics_pool, k=random.randint(1, 2))},
+            "style_pref": random.choice(styles),
+            "style_weight": random.randint(1, 3),
+            "gender_pref": random.choice(genders),
+            "therapy_goals": ["stabiliseren"],
+            "client_traits": random.sample(client_groups_pool, k=1),
+            "languages": random.sample(languages_pool, k=1),
+            "timeslots": random.sample(timeslots_pool, k=random.randint(1, 2)),
+            "budget": round(random.uniform(60, 120), 2),
+            "severity": random.randint(1, 5),
+            "lat": 52.0 + random.uniform(-0.5, 0.5),
+            "lon": 4.0 + random.uniform(-0.5, 0.5),
+            "expat": random.choice(expat_status),
+            "lgbtqia": random.choice(lgbtqia_status),
+        }
+        clients.append(cl)
+
+    print(f"Uploaden van {len(clients)} clients naar test_clients…")
+    resp = supabase.table("test_clients").insert(clients).execute()
+    if resp.status_code >= 400:
+        raise RuntimeError(f"Failed to insert clients: {resp.data}")
+    print("Clients succesvol geüpload.")
+
+    return clients
+
+# ───────────────────────────────────────────────────────────────────────────
+# Stap C: 2500 matches genereren tussen clients en therapists
+# ───────────────────────────────────────────────────────────────────────────
+def generate_and_upload_matches(clients, therapists, n_matches=2500):
     records = []
-    # Ophalen volledige therapist objecten uit Supabase
-    thr_resp = supabase.table("test_therapists").select("*").execute()
-    all_ths = thr_resp.data
 
-    # Build map id→therapist voor feature vector
-    id2th = {th["id"]: th for th in all_ths}
+    # Maak lookup dictionaries
+    id2client = {c["id"]: c for c in clients}
+    id2therapist = {t["id"]: t for t in therapists}
 
     for _ in range(n_matches):
-        th_id = random.choice(therapist_ids)
-        th    = id2th[th_id]
+        client = random.choice(clients)
+        therapist = random.choice(therapists)
 
-        # Dummy Therapist-object voor build_feature_vector
+        # Dummy Client en Therapist objecten voor build_feature_vector
+        class C:
+            client_id     = client["id"]
+            setting       = client["setting"]
+            max_km        = client["max_km"]
+            topics        = client["topics"]
+            topic_weights = client["topic_weights"]
+            style_pref    = client["style_pref"]
+            style_weight  = client["style_weight"]
+            gender_pref   = client["gender_pref"]
+            therapy_goals = client["therapy_goals"]
+            client_traits = client["client_traits"]
+            languages     = client["languages"]
+            timeslots     = client["timeslots"]
+            budget        = client["budget"]
+            severity      = client["severity"]
+            lat           = client["lat"]
+            lon           = client["lon"]
+
         class T:
-            id                   = th["id"]
-            setting              = th["setting"]
-            topics               = th["topics"]
-            client_groups        = th["client_groups"]
-            style                = th["style"]
-            therapist_goals      = th["therapist_goals"]
-            languages            = th["languages"]
-            timeslots            = th["timeslots"]
-            fee                  = th["fee"]
-            contract_with_insurer= th["contract_with_insurer"]
-            gender_pref          = th["gender_pref"]
-            lat                  = th["lat"]
-            lon                  = th["lon"]
+            id                   = therapist["id"]
+            setting              = therapist["setting"]
+            topics               = therapist["topics"]
+            client_groups        = therapist["client_groups"]
+            style                = therapist["style"]
+            therapist_goals      = therapist["therapist_goals"]
+            languages            = therapist["languages"]
+            timeslots            = therapist["timeslots"]
+            fee                  = therapist["fee"]
+            contract_with_insurer= therapist["contract_with_insurer"]
+            gender_pref          = therapist["gender_pref"]
+            lat                  = therapist["lat"]
+            lon                  = therapist["lon"]
 
-        fv = build_feature_vector(client, T)
-        # Realistische label: mix van topic, style, language
-        rel   = (fv["weighted_topic_overlap"] * 2 + fv["style_match"] + fv["language_overlap"]) / 4
+        fv = build_feature_vector(C, T)
+
+        # Realistische label (0, 1 of 2)
+        rel = (fv["weighted_topic_overlap"] * 2 + fv["style_match"] + fv["language_overlap"]) / 4
         label = int(rel * 3)
 
-        # Voeg client_id en therapist_id toe
-        fv["client_id"]    = str(client.client_id)
-        fv["therapist_id"] = th_id
+        fv["client_id"]    = client["id"]
+        fv["therapist_id"] = therapist["id"]
         fv["label"]        = label
         records.append(fv)
 
@@ -127,10 +162,10 @@ def generate_and_upload_matches(client, therapist_ids, n_matches=2000):
 # Main
 # ───────────────────────────────────────────────────────────────────────────
 def main():
-    therapist_ids = generate_fake_therapists(50)
-    client        = make_dummy_client()
-    generate_and_upload_matches(client, therapist_ids, 2000)
-    print("Klaar: 50 therapists en 2000 match records staan in Supabase.")
+    therapists = generate_fake_therapists(50)
+    clients    = generate_fake_clients(50)
+    generate_and_upload_matches(clients, therapists, 2500)
+    print("Klaar: 50 therapists, 50 clients en 2500 match records staan in Supabase.")
 
 
 if __name__ == "__main__":
