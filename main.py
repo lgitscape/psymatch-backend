@@ -2,7 +2,7 @@
 
 from fastapi import FastAPI
 from prometheus_client import Counter, start_http_server
-from pydantic import BaseSettings
+from pydantic_settings import BaseSettings
 import structlog
 import uvicorn
 
