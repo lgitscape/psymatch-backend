@@ -17,6 +17,7 @@ class DummyClient:
         self.severity = 3
         self.lat = 52.01
         self.lon = 4.41
+        self.gender_pref = None  
 
 class DummyTherapist:
     def __init__(self, id):
