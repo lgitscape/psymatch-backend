@@ -6,6 +6,7 @@ from engine.matcher import Matcher
 
 class DummyClient:
     def __init__(self):
+        self.client_id = id
         self.topics = ["stress"]
         self.setting = "online"
         self.topic_weights = {"stress": 3}
@@ -40,7 +41,7 @@ class DummyTherapist:
         self.lat = 52.01
         self.lon = 4.41
 
-@pytest.mark.asyncio
+@@pytest.mark.asyncio
 async def test_ann_cache_refresh():
     client = DummyClient()
     therapists = [DummyTherapist(str(i)) for i in range(3000)]
@@ -54,4 +55,13 @@ async def test_ann_cache_refresh():
     time.sleep(1)
 
     # Add therapist → triggers cache refresh
-    therapists
+    therapists.append(DummyTherapist("new_therapist"))
+
+    # Run matcher again
+    matcher = Matcher(client, therapists)
+    await matcher.run()
+
+    new_timestamp = matcher._ann_cache_timestamp
+
+    # Check that ANN cache was refreshed
+    assert new_timestamp > old_timestamp
