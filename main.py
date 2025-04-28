@@ -12,6 +12,7 @@ from supabase_client import supabase
 from utils.supabase_utils import insert_with_retry
 from engine.models import init_lambda_model
 from utils.fetch_therapists import fetch_therapists
+from pydantic import Field
 
 log = structlog.get_logger()
 
@@ -20,16 +21,16 @@ log = structlog.get_logger()
 class Settings(BaseSettings):
     app_name: str = "PsyMatch Recommender"
     version: str = "5.5.5"
-    prometheus_port: int = 8001
     host: str = "0.0.0.0"
-    port: int = 8000
+    port: int = Field(8000, env="PORT")
+    prometheus_port: int = Field(0, env="PROMETHEUS_PORT")
 
 settings = Settings()
 
 # ─────────────────────────────
 # Prometheus monitoring
-REQUEST_COUNTER = Counter("psymatch_requests_total", "Total /recommend requests made")
-FALLBACK_COUNTER = Counter("psymatch_fallbacks_total", "Total number of fallbacks to rule-based scoring")
+REQUEST_COUNTER = Counter("psymatch_requests", "Total /recommend requests made")
+FALLBACK_COUNTER = Counter("psymatch_fallbacks", "Total number of fallbacks to rule-based scoring")
 MATCHES_RETURNED_COUNTER = Counter("psymatch_matches_returned", "Number of matches returned per request")
 FILTERED_OUT_COUNTER = Counter("psymatch_matches_filtered_out", "Number of matches filtered out under minimum score")
 
@@ -60,4 +61,11 @@ async def startup_event():
 # ─────────────────────────────
 # Main entrypoint
 if __name__ == "__main__":
-    uvicorn.run("main:app", host=settings.host, port=settings.port, reload=True)
+    import os
+    import uvicorn
+
+    uvicorn.run(
+        "main:app",
+        host=settings.host,
+        port=settings.port,
+    )
