@@ -1,7 +1,7 @@
 # 📦 main.py
 
 from fastapi import FastAPI
-from prometheus_client import Counter, start_http_server
+from prometheus_client import Counter, start_http_server, REGISTRY
 from pydantic_settings import BaseSettings
 import structlog
 import uvicorn
@@ -29,10 +29,18 @@ settings = Settings()
 
 # ─────────────────────────────
 # Prometheus monitoring
-REQUEST_COUNTER = Counter("psymatch_requests", "Total /recommend requests made")
-FALLBACK_COUNTER = Counter("psymatch_fallbacks", "Total number of fallbacks to rule-based scoring")
-MATCHES_RETURNED_COUNTER = Counter("psymatch_matches_returned", "Number of matches returned per request")
-FILTERED_OUT_COUNTER = Counter("psymatch_matches_filtered_out", "Number of matches filtered out under minimum score")
+
+if "psymatch_requests" not in REGISTRY._names:
+    REQUEST_COUNTER = Counter("psymatch_requests", "Total /recommend requests made")
+
+if "psymatch_fallbacks" not in REGISTRY._names:
+    FALLBACK_COUNTER = Counter("psymatch_fallbacks", "Total number of fallbacks to rule-based scoring")
+
+if "psymatch_matches_returned" not in REGISTRY._names:
+    MATCHES_RETURNED_COUNTER = Counter("psymatch_matches_returned", "Number of matches returned per request")
+
+if "psymatch_matches_filtered_out" not in REGISTRY._names:
+    FILTERED_OUT_COUNTER = Counter("psymatch_matches_filtered_out", "Number of matches filtered out under minimum score")
 
 # ─────────────────────────────
 # Dummy therapist list (later replace with DB fetch)
