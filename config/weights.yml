@@ -1,0 +1,13 @@
+default:
+  weighted_topic_overlap: 2.0
+  style_match: 1.0
+  style_weight: 0.5
+  language_overlap: 1.0
+  timeslot_overlap: 0.5
+  fee_score: 1.0
+  budget_penalty: -1.0
+  gender_ok: 0.5
+  goal_overlap: 1.5
+  client_group_ok: 1.0
+  severity: 0.2
+  distance_km: -0.01
