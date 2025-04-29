@@ -37,8 +37,8 @@ def generate_fake_therapists(n=50):
 
     print(f"Uploaden van {len(therapists)} therapists naar test_therapists…")
     resp = supabase.table("test_therapists").insert(therapists).execute()
-    if resp.status_code >= 400:
-        raise RuntimeError(f"Failed to insert therapists: {resp.data}")
+    if resp.error:
+        raise RuntimeError(f"Failed to insert therapists: {resp.error}")
     print("Therapists succesvol geüpload.")
 
     return therapists
