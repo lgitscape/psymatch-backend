@@ -14,6 +14,9 @@ import optuna
 import numpy as np
 import joblib
 
+# Globale statusvariabele
+training_status = {"status": "idle", "progress": 0}
+
 log = structlog.get_logger()
 
 # Settings
@@ -76,7 +79,6 @@ def build_training_data(matches: pd.DataFrame, clients: pd.DataFrame, therapists
     df = pd.DataFrame(feature_rows)
     client_ids = df.pop("client_id")
 
-    # Ensure categorical columns are present and set as 'category' dtype
     for col in CATEGORICAL_COLUMNS:
         if col in df.columns:
             df[col] = df[col].astype("category")
@@ -90,15 +92,16 @@ def train_model(
     client_ids: List[str],
     n_trials: int = 100,
     save_models: bool = True,
-    show_progress: bool = True  # NIEUW
+    show_progress: bool = True
 ) -> None:
+    global training_status
+
     log.info("Starting model training", samples=len(y))
 
     X = X.reset_index(drop=True)
     y = np.array(y)
     client_ids = np.array(client_ids)
 
-    # Split into train/test
     X_train, X_test, y_train, y_test, client_ids_train, _ = train_test_split(
         X, y, client_ids, test_size=TEST_SIZE, random_state=42
     )
@@ -152,14 +155,13 @@ def train_model(
     if show_progress:
         total_trials = n_trials
         trial_counter = 0
-        
+
         for _ in range(n_trials):
             study.optimize(objective, n_trials=1)
-        
             trial_counter += 1
             progress = (trial_counter / total_trials) * 100
+            training_status["progress"] = int(progress)
             log.info(f"Training progress: {int(progress)}%")
-
     else:
         study.optimize(objective, n_trials=n_trials)
 
@@ -192,19 +194,16 @@ def train_model(
 
         models.append(model)
 
-    # Save ensemble as one object
     if save_models:
         timestamp = datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
         models_path = MODEL_DIR / f"ensemble_models_{timestamp}.pkl"
         joblib.dump(models, models_path)
         log.info("Saved ensemble models", path=str(models_path))
 
-    # Evaluate ensemble
     preds = np.mean([model.predict(X_test) for model in models], axis=0)
     test_rmse = root_mean_squared_error(y_test, preds)
     log.info("Test RMSE (ensemble)", test_rmse=test_rmse)
 
-    # Save Optuna study
     study_path = MODEL_DIR / f"optuna_study_{timestamp}.pkl"
     joblib.dump(study, study_path)
 
@@ -221,18 +220,26 @@ def load_models(models_path: Path) -> List[lgb.Booster]:
 
 
 def main(n_trials: int = 100) -> None:
-    clients, therapists, matches = fetch_data()
-    X_train, y_train, client_ids = build_training_data(matches, clients, therapists)
+    global training_status
+    try:
+        training_status["status"] = "running"
+        training_status["progress"] = 0
+        clients, therapists, matches = fetch_data()
+        X_train, y_train, client_ids = build_training_data(matches, clients, therapists)
 
-    if not X_train.empty and y_train:
-        train_model(X_train, y_train, client_ids, n_trials=n_trials)
-    else:
-        log.error("No valid training data found.")
+        if not X_train.empty and y_train:
+            train_model(X_train, y_train, client_ids, n_trials=n_trials)
+            training_status["status"] = "completed"
+            training_status["progress"] = 100
+        else:
+            log.error("No valid training data found.")
+            training_status["status"] = "failed"
+    except Exception as e:
+        training_status["status"] = "failed"
+        training_status["progress"] = 0
+        log.error("Training pipeline failed", error=str(e))
+        raise
 
 
 if __name__ == "__main__":
-    try:
-        main()
-    except Exception as e:
-        log.error("Training pipeline failed", error=str(e))
-        raise
+    main()

@@ -229,6 +229,9 @@ async def admin_train_model(background_tasks: BackgroundTasks):
     background_tasks.add_task(train_model_main)
     return {"status": "Training started"}
 
+@router.get("/admin/train-status")
+async def get_train_status():
+    return training_status
 
 @router.post("/admin/reload-model")
 async def admin_reload_model():
