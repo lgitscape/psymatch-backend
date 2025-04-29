@@ -13,7 +13,6 @@ from types import SimpleNamespace
 import optuna
 import numpy as np
 import joblib
-from tqdm import tqdm  # NIEUW
 
 log = structlog.get_logger()
 
@@ -139,10 +138,7 @@ def train_model(
                 valid_sets=[dvalid],
                 valid_names=['valid'],
                 num_boost_round=10000,
-                callbacks=[
-                    lgb.early_stopping(stopping_rounds=100),
-                    lgb.log_evaluation(period=100)
-                ]
+                callbacks=[lgb.early_stopping(stopping_rounds=100), lgb.log_evaluation(period=100)]
             )
 
             preds = model.predict(X_val, num_iteration=model.best_iteration)
@@ -154,10 +150,16 @@ def train_model(
     study = optuna.create_study(direction="minimize")
 
     if show_progress:
-        with tqdm(total=n_trials, desc="Optuna Trials", colour="green") as pbar:
-            def callback(study, trial):
-                pbar.update(1)
-            study.optimize(objective, n_trials=n_trials, callbacks=[callback])
+        total_folds = N_SPLITS * n_trials
+        fold_counter = 0
+
+        for trial in range(n_trials):
+            study.optimize(objective, n_trials=1)
+
+            fold_counter += 1
+            progress = (fold_counter / total_folds) * 100
+            log.info(f"Training progress: {int(progress)}%")
+
     else:
         study.optimize(objective, n_trials=n_trials)
 
@@ -176,11 +178,7 @@ def train_model(
     models = []
     gkf = GroupKFold(n_splits=N_SPLITS)
 
-    fold_iterator = gkf.split(X_train, y_train, groups=client_ids_train)
-    if show_progress:
-        fold_iterator = tqdm(fold_iterator, total=N_SPLITS, desc="Training Folds", colour="blue")
-
-    for fold, (train_idx, val_idx) in enumerate(fold_iterator):
+    for fold, (train_idx, val_idx) in enumerate(gkf.split(X_train, y_train, groups=client_ids_train)):
         X_tr = X_train.iloc[train_idx]
         y_tr = y_train[train_idx]
 
@@ -211,6 +209,7 @@ def train_model(
     joblib.dump(study, study_path)
 
     log.info("Training complete.")
+
 
 def predict_ensemble(models: List[lgb.Booster], X_new: pd.DataFrame) -> np.ndarray:
     preds = np.mean([model.predict(X_new, num_iteration=model.best_iteration) for model in models], axis=0)
