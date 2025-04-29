@@ -1,5 +1,3 @@
-# 📦 /api/handlers.py
-
 from fastapi import APIRouter, HTTPException, Depends
 from fastapi.responses import JSONResponse
 from schemas.schemas import (
@@ -20,7 +18,7 @@ from services.matcher_service import (
 )
 from supabase_client import supabase
 from utils.supabase_utils import insert_with_retry
-from engine.models import lambda_model
+from engine.models import lambda_model, init_lambda_model
 import structlog
 import pandas as pd
 from engine.features import build_feature_vector
@@ -39,14 +37,11 @@ THERAPISTS = []
 # Create SHAP explainer globally
 explainer = None
 
-# ─────────────────────────────
 def initialize_explainer():
     global explainer
     if lambda_model and lambda_model.model:
         explainer = shap.TreeExplainer(lambda_model.model.booster_)
 
-# ─────────────────────────────
-# Health Check
 @router.get("/", response_model=HealthCheckResponse)
 async def healthcheck():
     return JSONResponse(content=HealthCheckResponse(
@@ -55,21 +50,28 @@ async def healthcheck():
         version="5.5.3"
     ).model_dump())
 
-# ─────────────────────────────
-# Recommend Endpoint
 @router.post("/recommend", response_model=RecommendResponse, responses={404: {"model": ErrorResponse}, 500: {"model": ErrorResponse}})
 async def recommend(client: ClientProfile, top_n: int = 10):
     REQUEST_COUNTER.inc()
 
     if not client.topics or not client.languages or not client.timeslots:
-        raise HTTPException(status_code=422, detail="Topics, languages and timeslots are required.")
+        return JSONResponse(
+            status_code=422,
+            content=ErrorResponse(
+                status="error",
+                message="Topics, languages and timeslots are required."
+            ).model_dump()
+        )
 
     matches, algorithm_used = await run_matcher(client, THERAPISTS, top_n=top_n)
 
     if not matches:
-        raise HTTPException(
+        return JSONResponse(
             status_code=404,
-            detail=ErrorResponse(status="error", message="No suitable therapists found with at least 80% match score.").model_dump()
+            content=ErrorResponse(
+                status="error",
+                message="No suitable therapists found with at least 80% match score."
+            ).model_dump()
         )
 
     try:
@@ -84,38 +86,66 @@ async def recommend(client: ClientProfile, top_n: int = 10):
         insert_with_retry(supabase.table("match_logs"), row)
 
     except Exception as e:
-        raise HTTPException(status_code=500, detail=ErrorResponse(status="error", message="Failed to log match to Supabase.", info=str(e)).model_dump())
+        return JSONResponse(
+            status_code=500,
+            content=ErrorResponse(
+                status="error",
+                message="Failed to log match to Supabase.",
+                info=str(e)
+            ).model_dump()
+        )
 
     return RecommendResponse(status="success", data=matches)
 
-# ─────────────────────────────
-# Explain Endpoint
 @router.post("/explain", response_model=ExplainResponse, responses={404: {"model": ErrorResponse}, 500: {"model": ErrorResponse}})
 async def explain(client: ClientProfile):
     match = await run_explanation(client, THERAPISTS)
 
     if not match:
-        raise HTTPException(status_code=404, detail="No suitable therapist found for explanation.")
+        return JSONResponse(
+            status_code=404,
+            content=ErrorResponse(
+                status="error",
+                message="No suitable therapist found for explanation."
+            ).model_dump()
+        )
 
     therapist_id = match["therapist_id"]
     best_match_therapist = next((th for th in THERAPISTS if th.id == therapist_id), None)
 
     if not best_match_therapist:
-        raise HTTPException(status_code=404, detail="Therapist not found.")
+        return JSONResponse(
+            status_code=404,
+            content=ErrorResponse(
+                status="error",
+                message="Therapist not found."
+            ).model_dump()
+        )
 
     feat = build_feature_vector(client, best_match_therapist)
     feat_df = pd.DataFrame([feat])
 
     if not lambda_model or not lambda_model.model:
-        raise HTTPException(status_code=500, detail="Model not loaded.")
+        return JSONResponse(
+            status_code=500,
+            content=ErrorResponse(
+                status="error",
+                message="Model not loaded."
+            ).model_dump()
+        )
 
     global explainer
 
     if not explainer:
-        raise HTTPException(status_code=500, detail="Explainer not initialized")
+        return JSONResponse(
+            status_code=500,
+            content=ErrorResponse(
+                status="error",
+                message="Explainer not initialized"
+            ).model_dump()
+        )
 
     shap_values = await asyncio.to_thread(explainer.shap_values, feat_df)
-
 
     explanation = {
         "base_value": float(explainer.expected_value),
@@ -134,15 +164,19 @@ async def explain(client: ClientProfile):
 
     return ExplainResponse(status="success", data=explanation)
 
-# ─────────────────────────────
-# Choose Match Endpoint
 @router.post("/match/{match_id}/choose/{therapist_id}", response_model=ChooseMatchResponse, responses={404: {"model": ErrorResponse}, 500: {"model": ErrorResponse}})
 async def choose_match(match_id: str, therapist_id: str):
     try:
         response = supabase.table("match_logs").select("id").eq("id", match_id).execute()
 
         if not response.data:
-            raise HTTPException(status_code=404, detail=f"Match ID {match_id} not found.")
+            return JSONResponse(
+                status_code=404,
+                content=ErrorResponse(
+                    status="error",
+                    message=f"Match ID {match_id} not found."
+                ).model_dump()
+            )
 
         update_response = supabase.table("match_logs").update({"chosen_match_id": therapist_id}).eq("id", match_id).execute()
 
@@ -156,14 +190,22 @@ async def choose_match(match_id: str, therapist_id: str):
             therapist_id=therapist_id
         )
     except Exception as e:
-        raise HTTPException(status_code=500, detail=ErrorResponse(status="error", message="Failed to choose match.", info=str(e)).model_dump())
+        return JSONResponse(
+            status_code=500,
+            content=ErrorResponse(
+                status="error",
+                message="Failed to choose match.",
+                info=str(e)
+            ).model_dump()
+        )
 
-# ─────────────────────────────
-# Model Feature Importance
 @router.get("/model/feature-importance", response_model=dict)
 async def feature_importance():
     if not lambda_model or not lambda_model.model:
-        raise HTTPException(status_code=500, detail="Model not loaded")
+        return JSONResponse(
+            status_code=500,
+            content={"status": "error", "message": "Model not loaded"}
+        )
     booster = lambda_model.model.booster_
     importance = booster.feature_importance(importance_type='gain')
     feature_names = booster.feature_name()
@@ -171,36 +213,23 @@ async def feature_importance():
         "feature_importance": dict(zip(feature_names, importance.tolist()))
     }
 
-# ─────────────────────────────
-# Mock Model Retrain
 @router.post("/model/retrain", response_model=dict)
 async def retrain_model():
-    """Trigger retraining pipeline (mocked but future-proof)."""
-    # In the future: trigger a real MLflow / LightGBM pipeline here
     log.info("Retraining pipeline triggered (future real pipeline).")
-    await asyncio.sleep(1)  # simulate some work
+    await asyncio.sleep(1)
     return {"status": "success", "message": "Retraining pipeline started (mock)."}
-
-# ─────────────────────────────────────────────────────────────
-# Admin Endpoints
-# ─────────────────────────────────────────────────────────────
 
 @router.post("/admin/setup-training-data")
 async def admin_setup_training_data():
-    """Genereer fake therapists en training matches in Supabase."""
     setup_training_data()
     return {"status": "setup complete"}
 
 @router.post("/admin/train-model")
 async def admin_train_model():
-    """Train LambdaRank model op Supabase-data en sla op."""
     train_model_main()
     return {"status": "model trained"}
 
-from engine.models import init_lambda_model
-
 @router.post("/admin/reload-model")
 async def admin_reload_model():
-    """Reload het nieuw getrainde LambdaRank model in het geheugen."""
     init_lambda_model("models/latest_model.txt")
     return {"status": "model reloaded"}
