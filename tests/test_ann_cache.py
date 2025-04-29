@@ -62,7 +62,7 @@ async def test_ann_cache_refresh():
     therapists.append(DummyTherapist("new_therapist"))
 
     matcher = Matcher(client, therapists)
-    matches = await matcher.run()
+    matches, _ = await matcher.run()
 
     new_timestamp = matcher._ann_cache_timestamp
 
