@@ -5,39 +5,21 @@ from fastapi.testclient import TestClient
 from main import app
 import pytest
 import asyncio
+from tests.utils.dummies import DummyClient
 
 client = TestClient(app)
 
 pytest_plugins = ("pytest_asyncio",)
 
 def get_dummy_client():
-    """Creates a dummy client profile for testing."""
-    return {
-        "client_id": str(uuid.uuid4()),
-        "setting": "online",
-        "max_km": 20,
-        "topics": ["stress", "zelfbeeld"],
-        "topic_weights": {"stress": 3, "zelfbeeld": 2},
-        "style_pref": "Warm",
-        "style_weight": 4,
-        "gender_pref": "Geen voorkeur",
-        "therapy_goals": ["inzicht bieden"],
-        "client_traits": ["Jongvolwassene"],
-        "languages": ["nl"],
-        "timeslots": ["avond"],
-        "budget": 95.0,
-        "severity": 3,
-        "lat": 52.01,
-        "lon": 4.41
-    }
+    return DummyClient().__dict__  # voor API-test met JSON input
 
 @pytest.mark.asyncio
 async def test_matcher_direct_async():
-    """Directly test matcher logic."""
     from engine.matcher import Matcher
-    dummy_client = get_dummy_client()
-    matcher = Matcher(dummy_client, [])
-    results, _ = await matcher.run(top_n=10)
+    client = DummyClient()
+    matcher = Matcher(client, [])
+    results, _ = await matcher.run()
     assert isinstance(results, list)
 
 def test_recommend_success_or_404():
