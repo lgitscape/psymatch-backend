@@ -8,7 +8,7 @@ from supabase_client import supabase
 import structlog
 from datetime import datetime
 from sklearn.model_selection import GroupKFold, train_test_split
-from sklearn.metrics import mean_squared_error
+from sklearn.metrics import root_mean_squared_error
 from types import SimpleNamespace
 import optuna
 import numpy as np
@@ -142,7 +142,7 @@ def train_model(
             )
 
             preds = model.predict(X_val, num_iteration=model.best_iteration)
-            rmse = mean_squared_error(y_val, preds, squared=False)
+            rmse = root_mean_squared_error(y_val, preds)
             rmses.append(rmse)
 
         return np.mean(rmses)
@@ -201,7 +201,7 @@ def train_model(
 
     # Evaluate ensemble
     preds = np.mean([model.predict(X_test) for model in models], axis=0)
-    test_rmse = mean_squared_error(y_test, preds, squared=False)
+    test_rmse = root_mean_squared_error(y_test, preds, squared=False)
     log.info("Test RMSE (ensemble)", test_rmse=test_rmse)
 
     # Save Optuna study
