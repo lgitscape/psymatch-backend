@@ -9,3 +9,4 @@ prometheus-client
 lightgbm
 shap
 optuna
+tqdm

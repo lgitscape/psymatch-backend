@@ -13,6 +13,7 @@ from types import SimpleNamespace
 import optuna
 import numpy as np
 import joblib
+from tqdm import tqdm  # NIEUW
 
 log = structlog.get_logger()
 
@@ -84,7 +85,14 @@ def build_training_data(matches: pd.DataFrame, clients: pd.DataFrame, therapists
     return df, labels, client_ids
 
 
-def train_model(X: pd.DataFrame, y: List[float], client_ids: List[str], n_trials: int = 100, save_models: bool = True) -> None:
+def train_model(
+    X: pd.DataFrame,
+    y: List[float],
+    client_ids: List[str],
+    n_trials: int = 100,
+    save_models: bool = True,
+    show_progress: bool = True  # NIEUW
+) -> None:
     log.info("Starting model training", samples=len(y))
 
     X = X.reset_index(drop=True)
@@ -144,7 +152,14 @@ def train_model(X: pd.DataFrame, y: List[float], client_ids: List[str], n_trials
         return np.mean(rmses)
 
     study = optuna.create_study(direction="minimize")
-    study.optimize(objective, n_trials=n_trials)
+
+    if show_progress:
+        with tqdm(total=n_trials, desc="Optuna Trials", colour="green") as pbar:
+            def callback(study, trial):
+                pbar.update(1)
+            study.optimize(objective, n_trials=n_trials, callbacks=[callback])
+    else:
+        study.optimize(objective, n_trials=n_trials)
 
     log.info("Best trial", rmse=study.best_value, params=study.best_params)
 
@@ -161,7 +176,11 @@ def train_model(X: pd.DataFrame, y: List[float], client_ids: List[str], n_trials
     models = []
     gkf = GroupKFold(n_splits=N_SPLITS)
 
-    for fold, (train_idx, val_idx) in enumerate(gkf.split(X_train, y_train, groups=client_ids_train)):
+    fold_iterator = gkf.split(X_train, y_train, groups=client_ids_train)
+    if show_progress:
+        fold_iterator = tqdm(fold_iterator, total=N_SPLITS, desc="Training Folds", colour="blue")
+
+    for fold, (train_idx, val_idx) in enumerate(fold_iterator):
         X_tr = X_train.iloc[train_idx]
         y_tr = y_train[train_idx]
 
@@ -192,7 +211,6 @@ def train_model(X: pd.DataFrame, y: List[float], client_ids: List[str], n_trials
     joblib.dump(study, study_path)
 
     log.info("Training complete.")
-
 
 def predict_ensemble(models: List[lgb.Booster], X_new: pd.DataFrame) -> np.ndarray:
     preds = np.mean([model.predict(X_new, num_iteration=model.best_iteration) for model in models], axis=0)

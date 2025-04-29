@@ -9,6 +9,7 @@ prometheus-client
 lightgbm
 shap
 optuna
+tqdm
 
 # Extra's voor development
 pytest
