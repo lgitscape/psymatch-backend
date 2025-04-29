@@ -90,7 +90,7 @@ def train_model(
     X: pd.DataFrame,
     y: List[float],
     client_ids: List[str],
-    n_trials: int = 5,
+    n_trials: int = 100,
     save_models: bool = True,
     show_progress: bool = True
 ) -> None:
@@ -219,7 +219,7 @@ def load_models(models_path: Path) -> List[lgb.Booster]:
     return joblib.load(models_path)
 
 
-def main(n_trials: int = 100) -> None:
+def main(n_trials: int = 5) -> None:
     global training_status
     try:
         training_status["status"] = "running"
