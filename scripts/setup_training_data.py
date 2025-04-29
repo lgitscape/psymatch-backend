@@ -94,13 +94,28 @@ def generate_fake_clients(n=50):
 def generate_and_upload_matches(clients, therapists, n_matches=2500):
     records = []
 
-    # Maak lookup dictionaries
-    id2client = {c["id"]: c for c in clients}
-    id2therapist = {t["id"]: t for t in therapists}
-
     for _ in range(n_matches):
         client = random.choice(clients)
-        therapist = random.choice(therapists)
+
+        # Bepaal overlap score met alle therapists
+        therapist_scores = []
+        for therapist in therapists:
+            overlap = len(set(client["topics"]) & set(therapist["topics"]))
+            therapist_scores.append((therapist, overlap))
+
+        # Sorteer therapists op hoogste topic-overlap
+        therapist_scores.sort(key=lambda x: x[1], reverse=True)
+
+        # Kies random uit top 5 beste matches (of minder als er weinig overlap is)
+        top_choices = [th for th, score in therapist_scores[:5] if score > 0]
+        if not top_choices:
+            # Als geen overlap, fallback naar random therapist
+            top_choices = [therapist for therapist, _ in therapist_scores]
+
+        # Simuleer keuze met kansverdeling
+        choice_weights = [0.7, 0.2, 0.07, 0.02, 0.01]  # optelling = 1
+        idx = random.choices(range(len(top_choices)), weights=choice_weights[:len(top_choices)])[0]
+        therapist = top_choices[idx]
 
         # Dummy Client en Therapist objecten voor build_feature_vector
         class C:
@@ -142,10 +157,19 @@ def generate_and_upload_matches(clients, therapists, n_matches=2500):
         rel = (fv["weighted_topic_overlap"] * 2 + fv["style_match"] + fv["language_overlap"]) / 4
         label = int(rel * 3)
 
-        fv["client_id"]    = client["id"]
-        fv["therapist_id"] = therapist["id"]
-        fv["label"]        = label
+        # Simuleer initial en final score
+        initial_score = max(1, min(10, round(rel * 4 + random.uniform(0, 2))))  # Base + random noise
+        final_score   = max(1, min(10, round(rel * 4 + random.uniform(-1, 2))))  # Possibly slightly better/worse
+        
+        fv["client_id"]     = client["id"]
+        fv["therapist_id"]  = therapist["id"]
+        fv["label"]         = label
+        fv["initial_score"] = initial_score
+        fv["final_score"]   = final_score
+        fv["rank_in_top"]  = idx + 1  # 1 = beste match, 2 = tweede, etc.
+
         records.append(fv)
+
 
     print(f"Uploaden van {len(records)} match records naar test_training_data…")
     chunk_size = 500
