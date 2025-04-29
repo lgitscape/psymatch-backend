@@ -38,6 +38,10 @@ def generate_fake_therapists(n=50):
 
     print(f"Uploaden van {len(therapists)} therapists naar test_therapists…")
     resp = supabase.table("test_therapists").insert(therapists).execute()
+    print("=== ATTRIBUTES OF RESP ===")
+    for attr in dir(resp):
+        if not attr.startswith("_"):
+            print(attr)
     if resp.raw_response.status_code >= 400:
         raise RuntimeError(f"Failed to insert therapists: {resp.data}")
     print("Therapists succesvol geüpload.")
