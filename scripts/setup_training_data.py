@@ -93,11 +93,11 @@ def generate_fake_clients(n=50):
 # ───────────────────────────────────────────────────────────────────────────
 # Stap C: 2500 matches genereren tussen clients en therapists
 # ───────────────────────────────────────────────────────────────────────────
-def generate_and_upload_matches(clients, therapists, n_matches_per_client=1):
+def generate_and_upload_matches(clients, therapists):
     records = []
     seen_pairs = set()
 
-    print(f"Start matching {len(clients)} clients to therapists...")
+    print(f"Start matching {len(clients)} clients to 1 therapist each...")
 
     for idx, client in enumerate(clients, start=1):
         therapist_scores = []
@@ -107,96 +107,95 @@ def generate_and_upload_matches(clients, therapists, n_matches_per_client=1):
 
         therapist_scores.sort(key=lambda x: x[1], reverse=True)
 
-        top_choices = [th for th, score in therapist_scores[:5] if score > 0]
+        top_choices = [th for th, score in therapist_scores[:50] if score > 0]
         if not top_choices:
             top_choices = [therapist for therapist, _ in therapist_scores]
 
-        n_matches = min(n_matches_per_client, len(top_choices))  # in case too few therapists
-        for _ in range(n_matches):
-            # Weighted random choice
-            choice_weights = [0.7, 0.2, 0.07, 0.02, 0.01]
-            idx_choice = random.choices(range(len(top_choices)), weights=choice_weights[:len(top_choices)])[0]
-            therapist = top_choices[idx_choice]
+        # Weighted keuze uit top 5 (of meer als minder beschikbaar)
+        choice_weights = [0.7, 0.2, 0.07, 0.02, 0.01] + [0] * (len(top_choices) - 5)
+        therapist = random.choices(top_choices, weights=choice_weights[:len(top_choices)])[0]
 
-            pair = (client["id"], therapist["id"])
-            if pair in seen_pairs:
-                continue  # Already matched, skip
-            seen_pairs.add(pair)
+        pair = (client["id"], therapist["id"])
+        if pair in seen_pairs:
+            continue  # Zeer zeldzaam maar veilig
+        seen_pairs.add(pair)
 
-            # Dummy objects
-            class C:
-                client_id     = client["id"]
-                setting       = client["setting"]
-                max_km        = client["max_km"]
-                topics        = client["topics"]
-                topic_weights = client["topic_weights"]
-                style_pref    = client["style_pref"]
-                style_weight  = client["style_weight"]
-                gender_pref   = client["gender_pref"]
-                therapy_goals = client["therapy_goals"]
-                client_traits = client["client_traits"]
-                languages     = client["languages"]
-                timeslots     = client["timeslots"]
-                budget        = client["budget"]
-                severity      = client["severity"]
-                lat           = client["lat"]
-                lon           = client["lon"]
+        # Dummy Client en Therapist objecten
+        class C:
+            client_id     = client["id"]
+            setting       = client["setting"]
+            max_km        = client["max_km"]
+            topics        = client["topics"]
+            topic_weights = client["topic_weights"]
+            style_pref    = client["style_pref"]
+            style_weight  = client["style_weight"]
+            gender_pref   = client["gender_pref"]
+            therapy_goals = client["therapy_goals"]
+            client_traits = client["client_traits"]
+            languages     = client["languages"]
+            timeslots     = client["timeslots"]
+            budget        = client["budget"]
+            severity      = client["severity"]
+            lat           = client["lat"]
+            lon           = client["lon"]
 
-            class T:
-                id                   = therapist["id"]
-                setting              = therapist["setting"]
-                topics               = therapist["topics"]
-                client_groups        = therapist["client_groups"]
-                style                = therapist["style"]
-                therapist_goals      = therapist["therapist_goals"]
-                languages            = therapist["languages"]
-                timeslots            = therapist["timeslots"]
-                fee                  = therapist["fee"]
-                contract_with_insurer= therapist["contract_with_insurer"]
-                gender_pref          = therapist["gender_pref"]
-                lat                  = therapist["lat"]
-                lon                  = therapist["lon"]
+        class T:
+            id                   = therapist["id"]
+            setting              = therapist["setting"]
+            topics               = therapist["topics"]
+            client_groups        = therapist["client_groups"]
+            style                = therapist["style"]
+            therapist_goals      = therapist["therapist_goals"]
+            languages            = therapist["languages"]
+            timeslots            = therapist["timeslots"]
+            fee                  = therapist["fee"]
+            contract_with_insurer= therapist["contract_with_insurer"]
+            gender_pref          = therapist["gender_pref"]
+            lat                  = therapist["lat"]
+            lon                  = therapist["lon"]
 
-            fv = build_feature_vector(C, T)
+        fv = build_feature_vector(C, T)
 
-            rel = (fv["weighted_topic_overlap"] * 2 + fv["style_match"] + fv["language_overlap"]) / 4
-            label = int(rel * 3)
+        rel = (fv["weighted_topic_overlap"] * 2 + fv["style_match"] + fv["language_overlap"]) / 4
+        label = int(rel * 3)
 
-            initial_score = max(1, min(10, round(rel * 4 + random.uniform(0, 2))))
-            final_score   = max(1, min(10, round(rel * 4 + random.uniform(-1, 2))))
+        initial_score = max(1, min(10, round(rel * 4 + random.uniform(0, 2))))
+        final_score   = max(1, min(10, round(rel * 4 + random.uniform(-1, 2))))
 
-            fv["client_id"]     = client["id"]
-            fv["therapist_id"]  = therapist["id"]
-            fv["label"]         = label
-            fv["initial_score"] = initial_score
-            fv["final_score"]   = final_score
-            fv["rank_in_top"]   = idx_choice + 1
+        fv["client_id"]     = client["id"]
+        fv["therapist_id"]  = therapist["id"]
+        fv["label"]         = label
+        fv["initial_score"] = initial_score
+        fv["final_score"]   = final_score
+        fv["rank_in_top"]   = 1  # Altijd 1, want gekozen
 
-            records.append(fv)
+        records.append(fv)
 
-        print(f"Matched {idx}/{len(clients)} clients", flush=True)
+        if idx % 100 == 0:
+            print(f"Matched {idx}/{len(clients)} clients", flush=True)
 
-    # Upload batches
+    # Upload alle records
     print(f"Uploaden van {len(records)} match records naar test_training_data…")
     chunk_size = 500
     for i in range(0, len(records), chunk_size):
-        batch = records[i : i + chunk_size]
+        batch = records[i:i+chunk_size]
         resp = supabase.table("test_training_data").insert(batch).execute()
         if not resp.data:
             raise RuntimeError(f"Failed to insert training_data batch: {resp.data}")
         print(f"Uploaded batch {i // chunk_size + 1} ({len(batch)} records)", flush=True)
         time.sleep(0.5)
 
-    print("Alle match records succesvol geüpload.")
+    print("Alle {len(records)} match records succesvol geüpload.")
+
 
 # ───────────────────────────────────────────────────────────────────────────
 # Main
 # ───────────────────────────────────────────────────────────────────────────
 def main():
-    therapists = generate_fake_therapists(50)
-    clients    = generate_fake_clients(50)
-    generate_and_upload_matches(clients, therapists, 2500)
-    print("Klaar: 50 therapists, 50 clients en 2500 match records staan in Supabase.")
+    therapists = generate_fake_therapists(200)
+    clients    = generate_fake_clients(2000)
+    generate_and_upload_matches(clients, therapists, 2000)
+    print("Klaar: 200 therapists, 2000 clients en 2000 match records staan in Supabase.")
 
 
 if __name__ == "__main__":
