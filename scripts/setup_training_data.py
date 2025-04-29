@@ -1,5 +1,3 @@
-# scripts/setup_training_data.py
-
 import random
 import uuid
 import time
@@ -8,7 +6,23 @@ from supabase_client import supabase
 from engine.features import build_feature_vector
 
 # ───────────────────────────────────────────────────────────────────────────
-# Stap A: 50 fake therapists genereren en uploaden naar test_therapists
+# Hulpfunctie voor hardfilters
+# ───────────────────────────────────────────────────────────────────────────
+def passes_hardfilters(client, therapist) -> bool:
+    """Simuleer harde matchingregels zoals in productie."""
+    if therapist["fee"] > client["budget"]:
+        return False
+    if client["setting"] != "Geen voorkeur" and therapist["setting"] != "Geen voorkeur":
+        if client["setting"] != therapist["setting"]:
+            return False
+    if not set(client["languages"]).intersection(set(therapist["languages"])):
+        return False
+    if not set(client["client_traits"]).intersection(set(therapist["client_groups"])):
+        return False
+    return True
+
+# ───────────────────────────────────────────────────────────────────────────
+# Stap A: Fake therapists genereren en uploaden naar test_therapists
 # ───────────────────────────────────────────────────────────────────────────
 def generate_fake_therapists(n=50):
     topics_pool    = ["stress", "depressie", "angst", "relatie", "verlies"]
@@ -35,7 +49,7 @@ def generate_fake_therapists(n=50):
             "contract_with_insurer": random.choice([True, False]),
             "gender_pref": random.choice(genders),
             "lat": 52.0 + random.uniform(-0.5, 0.5),
-            "lon": 4.0  + random.uniform(-0.5, 0.5),
+            "lon": 4.0 + random.uniform(-0.5, 0.5),
         }
         therapists.append(th)
 
@@ -48,7 +62,7 @@ def generate_fake_therapists(n=50):
     return therapists
 
 # ───────────────────────────────────────────────────────────────────────────
-# Stap B: 50 fake clients genereren en uploaden naar test_clients
+# Stap B: Fake clients genereren en uploaden naar test_clients
 # ───────────────────────────────────────────────────────────────────────────
 def generate_fake_clients(n=50):
     topics_pool    = ["stress", "depressie", "angst", "relatie", "verlies"]
@@ -95,7 +109,7 @@ def generate_fake_clients(n=50):
     return clients
 
 # ───────────────────────────────────────────────────────────────────────────
-# Stap C: 2500 matches genereren tussen clients en therapists
+# Stap C: Matches genereren en uploaden
 # ───────────────────────────────────────────────────────────────────────────
 def generate_and_upload_matches(clients, therapists, n_matches_expected):
     records = []
@@ -106,22 +120,25 @@ def generate_and_upload_matches(clients, therapists, n_matches_expected):
     for idx, client in enumerate(clients, start=1):
         therapist_scores = []
         for therapist in therapists:
+            if not passes_hardfilters(client, therapist):
+                continue
             overlap = len(set(client["topics"]) & set(therapist["topics"]))
             therapist_scores.append((therapist, overlap))
 
         therapist_scores.sort(key=lambda x: x[1], reverse=True)
 
-        top_choices = [th for th, score in therapist_scores[:50] if score > 0]
-        if not top_choices:
-            top_choices = [therapist for therapist, _ in therapist_scores]
+        top_choices = [th for th, score in therapist_scores[:50]] if therapist_scores else []
 
-        # Weighted keuze uit top 5 (of meer als minder beschikbaar)
+        # Als na hardfilters niks overblijft, kies uit alle therapists
+        if not top_choices:
+            top_choices = therapists
+
         choice_weights = [0.7, 0.2, 0.07, 0.02, 0.01] + [0] * (len(top_choices) - 5)
         therapist = random.choices(top_choices, weights=choice_weights[:len(top_choices)])[0]
 
         pair = (client["id"], therapist["id"])
         if pair in seen_pairs:
-            continue  # Zeer zeldzaam maar veilig
+            continue
         seen_pairs.add(pair)
 
         # Dummy Client en Therapist objecten
@@ -163,15 +180,8 @@ def generate_and_upload_matches(clients, therapists, n_matches_expected):
         rel = (fv["weighted_topic_overlap"] * 2 + fv["style_match"] + fv["language_overlap"]) / 4
         label = int(rel * 3)
 
-        # Basis op rel, maar met flinke ruis
         initial_score = max(1, min(10, round(rel * 6 + random.uniform(-3, 3))))
-        
-        # Simuleer uitkomst: meestal kleine verschillen, af en toe drastisch
-        delta = random.choices(
-            [-3, -2, -1, 0, 1, 2, 3],
-            weights=[0.05, 0.1, 0.25, 0.3, 0.2, 0.08, 0.02]  # meer kleine dan grote verschuivingen
-        )[0]
-        
+        delta = random.choices([-3, -2, -1, 0, 1, 2, 3], weights=[0.05, 0.1, 0.25, 0.3, 0.2, 0.08, 0.02])[0]
         final_score = max(1, min(10, initial_score + delta))
 
         fv["client_id"]     = client["id"]
@@ -179,14 +189,13 @@ def generate_and_upload_matches(clients, therapists, n_matches_expected):
         fv["label"]         = label
         fv["initial_score"] = initial_score
         fv["final_score"]   = final_score
-        fv["rank_in_top"]   = 1  # Altijd 1, want gekozen
+        fv["rank_in_top"]   = 1
 
         records.append(fv)
 
         if idx % 100 == 0:
             print(f"Matched {idx}/{len(clients)} clients", flush=True)
 
-    # Upload alle records
     print(f"Uploaden van {len(records)} match records naar test_training_data…")
     chunk_size = 500
     for i in range(0, len(records), chunk_size):
@@ -207,7 +216,6 @@ def main():
     clients    = generate_fake_clients(2000)
     generate_and_upload_matches(clients, therapists, 2000)
     print("Klaar: 200 therapists, 2000 clients en 2000 match records staan in Supabase.")
-
 
 if __name__ == "__main__":
     main()
