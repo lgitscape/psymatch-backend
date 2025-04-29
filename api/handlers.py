@@ -25,7 +25,7 @@ from engine.features import build_feature_vector
 import shap
 import asyncio
 from scripts.setup_training_data import main as setup_training_data
-from scripts.train_model import main as train_model_main
+from scripts.train_model import main as train_model_main, training_status
 
 log = structlog.get_logger()
 
@@ -41,6 +41,12 @@ def initialize_explainer():
     global explainer
     if lambda_model and lambda_model.model:
         explainer = shap.TreeExplainer(lambda_model.model.booster_)
+
+def train_and_update_status():
+    try:
+        train_model_main()
+    finally:
+        training_status["status"] = "idle"  # Reset status altijd na afloop
 
 @router.get("/", response_model=HealthCheckResponse)
 async def healthcheck():
@@ -226,8 +232,8 @@ async def admin_setup_training_data():
 
 @router.post("/admin/train-model")
 async def admin_train_model(background_tasks: BackgroundTasks):
-    training_status["status"] = "training"  # update status bij start
-    background_tasks.add_task(train_model_main)
+    training_status["status"] = "training"  # Zet status op 'training'
+    background_tasks.add_task(train_and_update_status)
     return {"status": "Training started"}
 
 @router.get("/admin/train-status")
