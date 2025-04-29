@@ -64,10 +64,10 @@ def generate_fake_clients(n=50):
             "id": str(uuid.uuid4()),
             "setting": random.choice(setting),
             "max_km": random.choice([10, 25, 50]),
-            "topics": random.sample(topics_pool, k=random.randint(1, 2)),
-            "topic_weights": {topic: random.randint(1, 3) for topic in random.sample(topics_pool, k=random.randint(1, 2))},
+            "topics": random.sample(topics_pool, k=random.randint(1, 3)),
+            "topic_weights": {topic: random.randint(1, 5) for topic in random.sample(topics_pool, k=random.randint(1, 3))},
             "style_pref": random.choice(styles),
-            "style_weight": random.randint(1, 3),
+            "style_weight": random.randint(1, 5),
             "gender_pref": random.choice(genders),
             "therapy_goals": ["stabiliseren"],
             "client_traits": random.sample(client_groups_pool, k=1),
@@ -159,8 +159,16 @@ def generate_and_upload_matches(clients, therapists, n_matches_expected):
         rel = (fv["weighted_topic_overlap"] * 2 + fv["style_match"] + fv["language_overlap"]) / 4
         label = int(rel * 3)
 
-        initial_score = max(1, min(10, round(rel * 4 + random.uniform(0, 2))))
-        final_score   = max(1, min(10, round(rel * 4 + random.uniform(-1, 2))))
+        # Basis op rel, maar met flinke ruis
+        initial_score = max(1, min(10, round(rel * 6 + random.uniform(-3, 3))))
+        
+        # Simuleer uitkomst: meestal kleine verschillen, af en toe drastisch
+        delta = random.choices(
+            [-3, -2, -1, 0, 1, 2, 3],
+            weights=[0.05, 0.1, 0.25, 0.3, 0.2, 0.08, 0.02]  # meer kleine dan grote verschuivingen
+        )[0]
+        
+        final_score = max(1, min(10, initial_score + delta))
 
         fv["client_id"]     = client["id"]
         fv["therapist_id"]  = therapist["id"]
