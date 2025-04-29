@@ -150,7 +150,13 @@ def train_model(
 
         return np.mean(rmses)
 
-    study = optuna.create_study(direction="minimize")
+    study = optuna.create_study(
+        study_name="psymatch_lgbm_study",
+        direction="minimize",
+        storage="sqlite:///optuna_study.db",  # Or a full Postgres URI in production
+        load_if_exists=True
+    )
+
 
     if show_progress:
         total_trials = n_trials
@@ -219,7 +225,7 @@ def load_models(models_path: Path) -> List[lgb.Booster]:
     return joblib.load(models_path)
 
 
-def main(n_trials: int = 5) -> None:
+def main(n_trials: int = 100) -> None:
     global training_status
     try:
         training_status["status"] = "running"
