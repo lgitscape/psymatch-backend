@@ -1,50 +1,92 @@
-PsyMatch Matching Engine
+# PsyMatch Matching Engine
 
-Production-grade AI matching system for therapist-client compatibility.
+Een schaalbaar, transparant en privacy-bewust matchingsysteem voor cliënten en therapeuten.
 
 ![Coverage](./coverage.svg)
 
-Overview
---------
+## Visie van PsyMatch
 
-PsyMatch is a production-grade, scalable, resilient matching engine built to optimize therapist-client matching based on style, topics, availability, distance, and insurance considerations.
-The system uses progressive fallback filtering, ANN (Approximate Nearest Neighbors) shortlisting, stylistic diversity promotion, and explainable AI (SHAP) to ensure transparency and fairness.
+PsyMatch gelooft dat een goede match tussen cliënt en therapeut verder gaat dan alleen praktische zaken. We streven naar:
 
-Features
---------
+- **Inhoudelijke afstemming**: gedeelde thema’s, doelen en werkstijlen.
+- **Praktische haalbaarheid**: locatie, beschikbaarheid, taal en budget.
+- **Persoonlijke voorkeuren**: voorkeur voor gender, setting (online/fysiek), doelgroep.
+- **Zelfbeschikking**: het algoritme adviseert, de cliënt kiest.
+- **Uitlegbaarheid**: elke match is transparant en herleidbaar.
+- **Privacy**: geen opslag of logging van persoonsgegevens.
 
-- Progressive fallback logic (distance -> budget -> topic)
-- ANN-based scaling for more than 30,000 therapists
-- Async explainability API (SHAP with top-feature impact)
-- LambdaRank model ranking fallback
-- Full Prometheus metrics for monitoring
-- Future-proof retraining endpoint architecture
+## Belangrijkste functies
 
-Running Tests
--------------
+- Modulaire pipeline: filters → features → matcher → shortlist
+- ANN-index voor snelle shortlist bij grote aantallen therapeuten
+- LambdaRank fallback scoring + SHAP-compatibele uitleg
+- Metrics via Prometheus + lifecyclebeheer voor caching
+- Scoreweging configureerbaar via `weights.yml`
+- Volledige inputvalidatie, geen logging van PII
 
-Run the following command to execute all tests and generate coverage reports:
+## Installatie
 
-pytest --cov
-
-This will generate a coverage.svg badge and an HTML coverage report in the htmlcov/ directory.
-
-Project Structure
------------------
-
-/engine: Core matching logic, features, models
-/api: FastAPI routes and handlers
-/services: Service layer
-/utils: Utility helpers (Supabase client, retries)
-/tests: Unit and integration tests
-
-Installation
-------------
-
+```bash
+python -m venv venv
+source venv/bin/activate
 pip install -r requirements.txt
-pip install -r requirements-dev.txt
+```
 
-License
--------
+## Voorbeeldgebruik
+
+```bash
+python main.py --client examples/client_a.json
+```
+
+## CLI-opties
+
+```bash
+python main.py --client pad/naar/client.json [--rebuild-ann]
+```
+
+## Ontwikkelaarscommando’s (via Makefile)
+
+```bash
+make test          # Testen uitvoeren
+make run           # Matchingsengine uitvoeren
+make rebuild-ann   # ANN-index handmatig heropbouwen
+```
+
+## Match-output (voorbeeld)
+
+Elke match bestaat uit een gescoorde shortlist met uitleg per component. Bij gebruik van SHAP is een aparte uitleg op te vragen via het `/explain` endpoint.
+
+```json
+{
+  "client_id": "c123",
+  "top_matches": [
+    {
+      "therapist_id": "t456",
+      "score": 91.2,
+      "explanation": {
+        "topic_overlap": 0.8,
+        "style_match": 1.0,
+        "distance_km": 5.1
+      }
+    }, ...
+  ]
+}
+```
+
+## Schematisch overzicht
+
+![Systeemdiagram](docs/system_diagram.svg)
+
+## Documentatie
+
+- [Architectuur](docs/architecture.md)
+- [API-routes](docs/api.md)
+- [Privacybeleid](docs/privacy.md)
+
+## Wijzigingen
+
+Zie `CHANGELOG.md` voor de versiegeschiedenis.
+
+## Licentie
 
 © PsyMatch — All rights reserved.
