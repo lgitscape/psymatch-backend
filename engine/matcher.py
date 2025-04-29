@@ -1,6 +1,6 @@
 # 📦 engine/matcher.py
 # ─────────────────────────────
-# Full matching engine for PsyMatch v5.5.0
+# Full matching engine for PsyMatch
 
 from engine import filters, features
 import structlog
@@ -87,10 +87,11 @@ class Matcher:
 
         used_algorithm = "rule"
         try:
-            if lambda_model and lambda_model.model:
+            if lambda_model and hasattr(lambda_model, "models") and lambda_model.models:
                 scores = lambda_model.predict(feat_df)
-                log.info("Scored matches using LambdaRank model")
-                used_algorithm = "lambdarank"
+                log.info("Scored matches using Regression ensemble model")
+                used_algorithm = "regression_ensemble"
+
             else:
                 scores = [self._calculate_score(fv) for fv in features_list]
                 log.info("Scored matches using rule-based engine")

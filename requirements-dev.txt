@@ -8,6 +8,7 @@ supabase
 prometheus-client
 lightgbm
 shap
+optuna
 
 # Extra's voor development
 pytest
