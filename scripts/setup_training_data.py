@@ -93,7 +93,7 @@ def generate_fake_clients(n=50):
 # ───────────────────────────────────────────────────────────────────────────
 # Stap C: 2500 matches genereren tussen clients en therapists
 # ───────────────────────────────────────────────────────────────────────────
-def generate_and_upload_matches(clients, therapists):
+def generate_and_upload_matches(clients, therapists, n_matches_expected):
     records = []
     seen_pairs = set()
 
