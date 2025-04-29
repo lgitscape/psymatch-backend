@@ -20,7 +20,7 @@ log = structlog.get_logger()
 # Settings
 class Settings(BaseSettings):
     app_name: str = "PsyMatch Recommender"
-    version: str = "5.7.1"
+    version: str = "5.7.0"
     host: str = "0.0.0.0"
     port: int = Field(8000, env="PORT")
     prometheus_port: int = Field(0, env="PROMETHEUS_PORT")

@@ -212,3 +212,16 @@ class Matcher:
                 for cg in th.client_groups:
                     counter[cg] += 1
         log.info("Therapist client group distribution", distribution=dict(counter))
+
+async def predict_for_client(client, therapists, top_n=50):
+    """
+    Predict top N therapist matches for a given client.
+    Returns list of matches sorted by predicted score (highest first).
+    """
+    matcher = Matcher(client, therapists)
+    matches, algorithm = await matcher.run(top_n=top_n)
+
+    return {
+        "matches": matches,
+        "algorithm": algorithm
+    }

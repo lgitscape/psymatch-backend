@@ -47,7 +47,7 @@ async def healthcheck():
     return JSONResponse(content=HealthCheckResponse(
         status="ok",
         message="PsyMatch matching engine live",
-        version="5.7.1"
+        version="5.5.3"
     ).model_dump())
 
 @router.post("/recommend", response_model=RecommendResponse, responses={404: {"model": ErrorResponse}, 500: {"model": ErrorResponse}})
