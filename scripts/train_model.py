@@ -90,7 +90,7 @@ def train_model(
     X: pd.DataFrame,
     y: List[float],
     client_ids: List[str],
-    n_trials: int = 100,
+    n_trials: int = 5,
     save_models: bool = True,
     show_progress: bool = True
 ) -> None:
