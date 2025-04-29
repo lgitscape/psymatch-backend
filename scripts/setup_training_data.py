@@ -187,7 +187,6 @@ def generate_and_upload_matches(clients, therapists):
 
     print("Alle {len(records)} match records succesvol geüpload.")
 
-
 # ───────────────────────────────────────────────────────────────────────────
 # Main
 # ───────────────────────────────────────────────────────────────────────────
