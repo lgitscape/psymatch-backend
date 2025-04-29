@@ -62,7 +62,7 @@ async def test_ann_cache_refresh():
     therapists.append(DummyTherapist("new_therapist"))
 
     matcher = Matcher(client, therapists)
-    await matcher.run()
+    matches = await matcher.run()
 
     new_timestamp = matcher._ann_cache_timestamp
 
@@ -70,4 +70,5 @@ async def test_ann_cache_refresh():
         assert new_timestamp > old_timestamp
     else:
         # Defensive fallback if ANN not built
-        assert matcher.matches is not None
+        assert matches is not None
+        assert isinstance(matches, list)
