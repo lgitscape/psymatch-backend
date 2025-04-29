@@ -101,96 +101,101 @@ def generate_fake_clients(n=50):
 # ───────────────────────────────────────────────────────────────────────────
 # Stap C: 2500 matches genereren tussen clients en therapists
 # ───────────────────────────────────────────────────────────────────────────
-def generate_and_upload_matches(clients, therapists, n_matches=2500):
+def generate_and_upload_matches(clients, therapists, n_matches_per_client=1):
     records = []
+    seen_pairs = set()
 
-    for _ in range(n_matches):
-        client = random.choice(clients)
+    print(f"Start matching {len(clients)} clients to therapists...")
 
-        # Bepaal overlap score met alle therapists
+    for idx, client in enumerate(clients, start=1):
         therapist_scores = []
         for therapist in therapists:
             overlap = len(set(client["topics"]) & set(therapist["topics"]))
             therapist_scores.append((therapist, overlap))
 
-        # Sorteer therapists op hoogste topic-overlap
         therapist_scores.sort(key=lambda x: x[1], reverse=True)
 
-        # Kies random uit top 5 beste matches (of minder als er weinig overlap is)
         top_choices = [th for th, score in therapist_scores[:5] if score > 0]
         if not top_choices:
-            # Als geen overlap, fallback naar random therapist
             top_choices = [therapist for therapist, _ in therapist_scores]
 
-        # Simuleer keuze met kansverdeling
-        choice_weights = [0.7, 0.2, 0.07, 0.02, 0.01]  # optelling = 1
-        idx = random.choices(range(len(top_choices)), weights=choice_weights[:len(top_choices)])[0]
-        therapist = top_choices[idx]
+        n_matches = min(n_matches_per_client, len(top_choices))  # in case too few therapists
+        for _ in range(n_matches):
+            # Weighted random choice
+            choice_weights = [0.7, 0.2, 0.07, 0.02, 0.01]
+            idx_choice = random.choices(range(len(top_choices)), weights=choice_weights[:len(top_choices)])[0]
+            therapist = top_choices[idx_choice]
 
-        # Dummy Client en Therapist objecten voor build_feature_vector
-        class C:
-            client_id     = client["id"]
-            setting       = client["setting"]
-            max_km        = client["max_km"]
-            topics        = client["topics"]
-            topic_weights = client["topic_weights"]
-            style_pref    = client["style_pref"]
-            style_weight  = client["style_weight"]
-            gender_pref   = client["gender_pref"]
-            therapy_goals = client["therapy_goals"]
-            client_traits = client["client_traits"]
-            languages     = client["languages"]
-            timeslots     = client["timeslots"]
-            budget        = client["budget"]
-            severity      = client["severity"]
-            lat           = client["lat"]
-            lon           = client["lon"]
+            pair = (client["id"], therapist["id"])
+            if pair in seen_pairs:
+                continue  # Already matched, skip
+            seen_pairs.add(pair)
 
-        class T:
-            id                   = therapist["id"]
-            setting              = therapist["setting"]
-            topics               = therapist["topics"]
-            client_groups        = therapist["client_groups"]
-            style                = therapist["style"]
-            therapist_goals      = therapist["therapist_goals"]
-            languages            = therapist["languages"]
-            timeslots            = therapist["timeslots"]
-            fee                  = therapist["fee"]
-            contract_with_insurer= therapist["contract_with_insurer"]
-            gender_pref          = therapist["gender_pref"]
-            lat                  = therapist["lat"]
-            lon                  = therapist["lon"]
+            # Dummy objects
+            class C:
+                client_id     = client["id"]
+                setting       = client["setting"]
+                max_km        = client["max_km"]
+                topics        = client["topics"]
+                topic_weights = client["topic_weights"]
+                style_pref    = client["style_pref"]
+                style_weight  = client["style_weight"]
+                gender_pref   = client["gender_pref"]
+                therapy_goals = client["therapy_goals"]
+                client_traits = client["client_traits"]
+                languages     = client["languages"]
+                timeslots     = client["timeslots"]
+                budget        = client["budget"]
+                severity      = client["severity"]
+                lat           = client["lat"]
+                lon           = client["lon"]
 
-        fv = build_feature_vector(C, T)
+            class T:
+                id                   = therapist["id"]
+                setting              = therapist["setting"]
+                topics               = therapist["topics"]
+                client_groups        = therapist["client_groups"]
+                style                = therapist["style"]
+                therapist_goals      = therapist["therapist_goals"]
+                languages            = therapist["languages"]
+                timeslots            = therapist["timeslots"]
+                fee                  = therapist["fee"]
+                contract_with_insurer= therapist["contract_with_insurer"]
+                gender_pref          = therapist["gender_pref"]
+                lat                  = therapist["lat"]
+                lon                  = therapist["lon"]
 
-        # Realistische label (0, 1 of 2)
-        rel = (fv["weighted_topic_overlap"] * 2 + fv["style_match"] + fv["language_overlap"]) / 4
-        label = int(rel * 3)
+            fv = build_feature_vector(C, T)
 
-        # Simuleer initial en final score
-        initial_score = max(1, min(10, round(rel * 4 + random.uniform(0, 2))))  # Base + random noise
-        final_score   = max(1, min(10, round(rel * 4 + random.uniform(-1, 2))))  # Possibly slightly better/worse
-        
-        fv["client_id"]     = client["id"]
-        fv["therapist_id"]  = therapist["id"]
-        fv["label"]         = label
-        fv["initial_score"] = initial_score
-        fv["final_score"]   = final_score
-        fv["rank_in_top"]  = idx + 1  # 1 = beste match, 2 = tweede, etc.
+            rel = (fv["weighted_topic_overlap"] * 2 + fv["style_match"] + fv["language_overlap"]) / 4
+            label = int(rel * 3)
 
-        records.append(fv)
+            initial_score = max(1, min(10, round(rel * 4 + random.uniform(0, 2))))
+            final_score   = max(1, min(10, round(rel * 4 + random.uniform(-1, 2))))
 
+            fv["client_id"]     = client["id"]
+            fv["therapist_id"]  = therapist["id"]
+            fv["label"]         = label
+            fv["initial_score"] = initial_score
+            fv["final_score"]   = final_score
+            fv["rank_in_top"]   = idx_choice + 1
 
+            records.append(fv)
+
+        print(f"Matched {idx}/{len(clients)} clients", flush=True)
+
+    # Upload batches
     print(f"Uploaden van {len(records)} match records naar test_training_data…")
     chunk_size = 500
     for i in range(0, len(records), chunk_size):
         batch = records[i : i + chunk_size]
-        resp  = supabase.table("test_training_data").insert(batch).execute()
+        resp = supabase.table("test_training_data").insert(batch).execute()
         if not resp.data:
             raise RuntimeError(f"Failed to insert training_data batch: {resp.data}")
+        print(f"Uploaded batch {i // chunk_size + 1} ({len(batch)} records)", flush=True)
         time.sleep(0.5)
-    print("Match records succesvol geüpload.")
 
+    print("Alle match records succesvol geüpload.")
 
 # ───────────────────────────────────────────────────────────────────────────
 # Main
