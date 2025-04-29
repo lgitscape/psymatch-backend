@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, BackgroundTasks
 from fastapi.responses import JSONResponse
 from schemas.schemas import (
     ClientProfile,
@@ -224,10 +224,11 @@ async def admin_setup_training_data():
     setup_training_data()
     return {"status": "setup complete"}
 
-@router.post("/admin/train-model")
-async def admin_train_model():
-    train_model_main()
-    return {"status": "model trained"}
+@app.post("/admin/train-model")
+async def admin_train_model(background_tasks: BackgroundTasks):
+    background_tasks.add_task(train_model_main)
+    return {"status": "Training started"}
+
 
 @router.post("/admin/reload-model")
 async def admin_reload_model():
