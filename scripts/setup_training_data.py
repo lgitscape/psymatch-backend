@@ -14,8 +14,11 @@ def generate_fake_therapists(n=50):
     topics_pool    = ["stress", "depressie", "angst", "relatie", "verlies"]
     styles         = ["Warm", "Direct", "Reflectief", "Praktisch"]
     timeslots_pool = ["ochtend", "middag", "avond"]
+    client_groups  = ["Volwassenen", "Ouderen", "Jongvolwassenen", "Kinderen"]
     genders        = ["Vrouw", "Man", "Anders"]
     setting        = ["Fysiek", "Online", "Geen voorkeur"]
+    therapist_goals= ["Mensen in beweging brengen", "Stabiliseren", "Inzicht brengen", "Emotieregulatie", "Relaties versterken"]
+    languages_pool = ["nl", "en", "es", "it"]
 
     therapists = []
     for _ in range(n):
@@ -23,10 +26,10 @@ def generate_fake_therapists(n=50):
             "id": str(uuid.uuid4()),
             "setting": random.choice(setting),
             "topics": random.sample(topics_pool, k=random.randint(1, 3)),
-            "client_groups": ["Volwassenen"],
+            "client_groups": random.sample(client_groups, k=random.randint(1, 3)),
             "style": random.choice(styles),
-            "therapist_goals": ["stabiliseren"],
-            "languages": ["nl"],
+            "therapist_goals": random.sample(therapist_goals, k=random.randint(1, 3)),
+            "languages": random.sample(languages_pool, k=random.randint(1, 2)),
             "timeslots": random.sample(timeslots_pool, k=random.randint(1, 2)),
             "fee": round(random.uniform(50, 150), 2),
             "contract_with_insurer": random.choice([True, False]),
@@ -52,11 +55,12 @@ def generate_fake_clients(n=50):
     styles         = ["Warm", "Direct", "Reflectief", "Praktisch"]
     timeslots_pool = ["ochtend", "middag", "avond"]
     client_groups_pool = ["Kinderen", "Adolescenten", "Volwassenen", "Ouderen"]
-    languages_pool = ["nl", "en"]
-    genders        = ["Man", "Vrouw", None]
+    languages_pool = ["nl", "en", "es", "it"]
+    genders        = ["Man", "Vrouw", "Anders"]
     setting        = ["Fysiek", "Online", "Geen voorkeur"]
     expat_status   = [True, False]
     lgbtqia_status = [True, False]
+    therapy_goals  = ["Beter functioneren", "Inzicht in patronen", "Emotieregulatie", "Zingeving", "Relatie verbeteren", "Zelfbeeld versterken"]
 
     clients = []
     for _ in range(n):
@@ -69,9 +73,9 @@ def generate_fake_clients(n=50):
             "style_pref": random.choice(styles),
             "style_weight": random.randint(1, 5),
             "gender_pref": random.choice(genders),
-            "therapy_goals": ["stabiliseren"],
+            "therapy_goals": random.sample(therapy_goals, k=random.randint(1, 3)),
             "client_traits": random.sample(client_groups_pool, k=1),
-            "languages": random.sample(languages_pool, k=1),
+            "languages": random.sample(languages_pool, k=random.randint(1, 2)),
             "timeslots": random.sample(timeslots_pool, k=random.randint(1, 2)),
             "budget": round(random.uniform(60, 120), 2),
             "severity": random.randint(1, 5),
@@ -193,7 +197,7 @@ def generate_and_upload_matches(clients, therapists, n_matches_expected):
         print(f"Uploaded batch {i // chunk_size + 1} ({len(batch)} records)", flush=True)
         time.sleep(0.5)
 
-    print("Alle {len(records)} match records succesvol geüpload.")
+    print(f"Alle {len(records)} match records succesvol geüpload.")
 
 # ───────────────────────────────────────────────────────────────────────────
 # Main
