@@ -1,0 +1,15 @@
+[run]
+branch = True
+source =
+    api
+    engine
+    services
+
+[report]
+show_missing = True
+skip_covered = True
+
+[paths]
+source =
+    src
+    .
