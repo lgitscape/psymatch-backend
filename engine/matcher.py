@@ -4,7 +4,7 @@
 
 from engine import filters, features
 import structlog
-from engine.models import lambda_model
+from engine.models import lightgbm_model
 import pandas as pd
 from collections import defaultdict
 from pathlib import Path
@@ -87,8 +87,8 @@ class Matcher:
 
         used_algorithm = "rule"
         try:
-            if lambda_model and hasattr(lambda_model, "models") and lambda_model.models:
-                scores = lambda_model.predict(feat_df)
+            if lightgbm_model and hasattr(lightgbm_model, "models") and lightgbm_model.models:
+                scores = lightgbm_model.predict(feat_df)
                 log.info("Scored matches using Regression ensemble model")
                 used_algorithm = "regression_ensemble"
 

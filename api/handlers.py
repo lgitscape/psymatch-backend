@@ -18,7 +18,7 @@ from services.matcher_service import (
 )
 from supabase_client import supabase
 from utils.supabase_utils import insert_with_retry
-from engine.models import lambda_model, init_lambda_model
+from engine.models import load_lightgbm_model
 import structlog
 import pandas as pd
 from engine.features import build_feature_vector
@@ -241,6 +241,6 @@ async def get_train_status():
     return training_status
 
 @router.post("/admin/reload-model")
-async def admin_reload_model():
-    init_lambda_model("models/latest_model.txt")
+async def admin_reload_model(version: str | None = None):
+    load_lightgbm_model(version=version)
     return {"status": "model reloaded"}

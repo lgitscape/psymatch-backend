@@ -1,37 +1,43 @@
 # 📦 engine/models.py
 # ─────────────────────────────
-# ML model loader for LambdaRank (LightGBM)
+# ML model loader for LightGBM Regression Ensemble
 
-from lightgbm import LGBMRanker
 from pathlib import Path
-import structlog
+import joblib
 import pandas as pd
+import structlog
 
 log = structlog.get_logger()
 
-class LambdaRankModel:
-    def __init__(self, model_path: str):
-        self.model_path = model_path
-        self.model = None
-        self.load_model()
-
-    def load_model(self):
-        try:
-            self.model = LGBMRanker()
-            self.model.booster_.load_model(self.model_path)
-            log.info("LambdaRank model loaded", path=self.model_path)
-        except Exception as e:
-            log.error("Failed to load LambdaRank model", error=str(e))
-            self.model = None
+class LightGBMModel:
+    def __init__(self, models):
+        self.models = models
 
     def predict(self, feature_df: pd.DataFrame):
-        if self.model is None:
-            raise ValueError("Model not loaded")
-        return self.model.predict(feature_df)
+        preds = [model.predict(feature_df) for model in self.models]
+        return sum(preds) / len(preds)
 
 # Global singleton
-lambda_model: LambdaRankModel | None = None
+lightgbm_model: LightGBMModel | None = None
 
-def init_lambda_model(model_path: str) -> None:
-    global lambda_model
-    lambda_model = LambdaRankModel(model_path)
+def load_lightgbm_model(version: str = None) -> None:
+    """
+    Loads the LightGBM ensemble model.
+    If version is None, loads the latest available model.
+    """
+    global lightgbm_model
+    model_dir = Path("models")
+
+    if version:
+        model_file = model_dir / f"ensemble_models_{version}.pkl"
+        if not model_file.exists():
+            raise FileNotFoundError(f"No model found for version {version}")
+    else:
+        model_files = list(model_dir.glob("ensemble_models_*.pkl"))
+        if not model_files:
+            raise FileNotFoundError("No ensemble model files found.")
+        model_file = max(model_files, key=lambda p: p.stat().st_ctime)
+
+    models = joblib.load(model_file)
+    lightgbm_model = LightGBMModel(models)
+    log.info("LightGBM model loaded", path=str(model_file))
