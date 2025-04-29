@@ -1,4 +1,4 @@
-# engine/__init__.py
+# 📦 engine/__init__.py
 # ─────────────────────────────
 # Init file for PsyMatch engine package
 # Exposes core components
@@ -6,7 +6,6 @@
 from .filters import apply_all_filters
 from .features import build_feature_vector
 from .matcher import Matcher
-from .lightgbm_model import lightgbm_model, load_lightgbm_model
 
 __all__ = [
     "apply_all_filters",
