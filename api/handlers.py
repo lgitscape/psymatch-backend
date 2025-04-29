@@ -18,7 +18,7 @@ from services.matcher_service import (
 )
 from supabase_client import supabase
 from utils.supabase_utils import insert_with_retry
-from engine.models import load_lightgbm_model
+from engine.models import lightgbm_model, load_lightgbm_model
 import structlog
 import pandas as pd
 from engine.features import build_feature_vector
@@ -39,8 +39,8 @@ explainer = None
 
 def initialize_explainer():
     global explainer
-    if lambda_model and lambda_model.model:
-        explainer = shap.TreeExplainer(lambda_model.model.booster_)
+    if lightgbm_model and lightgbm_model.models:
+        explainer = shap.TreeExplainer(lightgbm_model.models[0])
 
 def train_and_update_status():
     try:
@@ -53,7 +53,7 @@ async def healthcheck():
     return JSONResponse(content=HealthCheckResponse(
         status="ok",
         message="PsyMatch matching engine live",
-        version="5.5.3"
+        version="6.0.0"
     ).model_dump())
 
 @router.post("/recommend", response_model=RecommendResponse, responses={404: {"model": ErrorResponse}, 500: {"model": ErrorResponse}})
@@ -131,7 +131,7 @@ async def explain(client: ClientProfile):
     feat = build_feature_vector(client, best_match_therapist)
     feat_df = pd.DataFrame([feat])
 
-    if not lambda_model or not lambda_model.model:
+    if not lightgbm_model or not lightgbm_model.models:
         return JSONResponse(
             status_code=500,
             content=ErrorResponse(
@@ -207,12 +207,12 @@ async def choose_match(match_id: str, therapist_id: str):
 
 @router.get("/model/feature-importance", response_model=dict)
 async def feature_importance():
-    if not lambda_model or not lambda_model.model:
+    if not lightgbm_model or not lightgbm_model.models:
         return JSONResponse(
             status_code=500,
             content={"status": "error", "message": "Model not loaded"}
         )
-    booster = lambda_model.model.booster_
+    booster = lightgbm_model.models[0]
     importance = booster.feature_importance(importance_type='gain')
     feature_names = booster.feature_name()
     return {

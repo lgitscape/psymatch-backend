@@ -3,14 +3,14 @@
 from engine.matcher import Matcher
 from supabase_client import supabase
 from utils.supabase_utils import insert_with_retry
-from engine.models import lambda_model
+from engine.models import lightgbm_model 
 from prometheus_client import Counter
 
 REQUEST_COUNTER = Counter("psymatch_requests_total", "Total /recommend requests made")
 FALLBACK_COUNTER = Counter("psymatch_fallbacks_total", "Total number of fallbacks to rule-based scoring")
 MATCHES_RETURNED_COUNTER = Counter("psymatch_matches_returned", "Number of matches returned per request")
 FILTERED_OUT_COUNTER = Counter("psymatch_matches_filtered_out", "Number of matches filtered out under minimum score")
-MODEL_USAGE_COUNTER = Counter("psymatch_model_usage", "Algorithm used (rule vs lambdarank)", ["algorithm"])
+MODEL_USAGE_COUNTER = Counter("psymatch_model_usage", "Algorithm used (rule vs lightgbm)", ["algorithm"])
 
 async def run_matcher(client, therapists, top_n=10):
     matcher = Matcher(client, therapists)

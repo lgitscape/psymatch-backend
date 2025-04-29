@@ -10,7 +10,7 @@ from api.handlers import router as api_router
 from api.handlers import initialize_explainer
 from supabase_client import supabase
 from utils.supabase_utils import insert_with_retry
-from engine.models import init_lambda_model
+from engine.models import load_lightgbm_model
 from utils.fetch_therapists import fetch_therapists
 from pydantic import Field
 
@@ -20,7 +20,7 @@ log = structlog.get_logger()
 # Settings
 class Settings(BaseSettings):
     app_name: str = "PsyMatch Recommender"
-    version: str = "5.7.0"
+    version: str = "6.0.0"  # <-- nieuwe versie
     host: str = "0.0.0.0"
     port: int = Field(8000, env="PORT")
     prometheus_port: int = Field(0, env="PROMETHEUS_PORT")
@@ -45,6 +45,7 @@ existing_metrics = set(metric.name for metric in REGISTRY.collect())
 for name, description in metric_definitions:
     if name not in existing_metrics:
         globals()[name.upper()] = Counter(name, description)
+
 # ─────────────────────────────
 # Dummy therapist list (later replace with DB fetch)
 THERAPISTS = []
@@ -64,10 +65,10 @@ async def startup_event():
     try:
         from engine.model_registry_helper import get_latest_production_model
         model_path = get_latest_production_model() or "./models/latest_model.txt"
-        init_lambda_model(model_path)
+        load_lightgbm_model(version=None, model_path=model_path)
         initialize_explainer()
     except Exception as e:
-        log.warning("Could not initialize LambdaRank model", error=str(e))
+        log.warning("Could not initialize LightGBM model", error=str(e))
 
 # ─────────────────────────────
 # Main entrypoint

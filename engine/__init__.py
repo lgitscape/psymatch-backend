@@ -6,6 +6,7 @@
 from .filters import apply_all_filters
 from .features import build_feature_vector
 from .matcher import Matcher
+from .lightgbm_model import lightgbm_model, load_lightgbm_model
 
 __all__ = [
     "apply_all_filters",
