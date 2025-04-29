@@ -14,7 +14,7 @@ def generate_fake_therapists(n=50):
     topics_pool    = ["stress", "depressie", "angst", "relatie", "verlies"]
     styles         = ["Warm", "Direct", "Reflectief", "Praktisch"]
     timeslots_pool = ["ochtend", "middag", "avond"]
-    genders        = ["Vrouw", "Man", None]
+    genders        = ["Vrouw", "Man", "Anders"]
     setting        = ["Fysiek", "Online", "Geen voorkeur"]
 
     therapists = []
