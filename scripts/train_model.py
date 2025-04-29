@@ -2,7 +2,7 @@ import pandas as pd
 import lightgbm as lgb
 import os
 from pathlib import Path
-from typing import Tuple, Dict
+from typing import Tuple, Dict, List
 from engine.features import build_feature_vector
 from supabase_client import supabase
 import structlog
@@ -22,6 +22,7 @@ MODEL_DIR.mkdir(parents=True, exist_ok=True)
 
 N_SPLITS = 5
 TEST_SIZE = 0.1
+CATEGORICAL_COLUMNS = ["item_category_1", "item_category_2", "item_category_3"]  # Example categorical features
 
 
 def fetch_data() -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
@@ -39,10 +40,10 @@ def fetch_data() -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
         log.error("Failed to fetch data", error=str(e))
         raise
 
+
 def build_training_data(matches: pd.DataFrame, clients: pd.DataFrame, therapists: pd.DataFrame) -> Tuple[pd.DataFrame, list, list]:
     feature_rows = []
     labels = []
-    groups = []
 
     id2client = {row["id"]: row for _, row in clients.iterrows()}
     id2therapist = {row["id"]: row for _, row in therapists.iterrows()}
@@ -61,7 +62,6 @@ def build_training_data(matches: pd.DataFrame, clients: pd.DataFrame, therapists
             t = SimpleNamespace(**therapist_data)
 
             fv = build_feature_vector(c, t)
-
             initial_score = match.get("initial_score", 5) / 10.0
             fv["initial_score"] = initial_score
 
@@ -75,19 +75,28 @@ def build_training_data(matches: pd.DataFrame, clients: pd.DataFrame, therapists
 
     df = pd.DataFrame(feature_rows)
     client_ids = df.pop("client_id")
+
+    # Ensure categorical columns are present and set as 'category' dtype
+    for col in CATEGORICAL_COLUMNS:
+        if col in df.columns:
+            df[col] = df[col].astype("category")
+
     return df, labels, client_ids
 
-def train_model(X: pd.DataFrame, y: list, client_ids: list, n_trials: int = 100) -> None:
+
+def train_model(X: pd.DataFrame, y: List[float], client_ids: List[str], n_trials: int = 100, save_models: bool = True) -> None:
     log.info("Starting model training", samples=len(y))
 
     X = X.reset_index(drop=True)
     y = np.array(y)
     client_ids = np.array(client_ids)
 
-    # Split into train/test before any training
+    # Split into train/test
     X_train, X_test, y_train, y_test, client_ids_train, _ = train_test_split(
-        X, y, client_ids, test_size=TEST_SIZE, random_state=42, stratify=None
+        X, y, client_ids, test_size=TEST_SIZE, random_state=42
     )
+
+    categorical_features = [col for col in CATEGORICAL_COLUMNS if col in X_train.columns]
 
     def objective(trial):
         params = {
@@ -113,8 +122,8 @@ def train_model(X: pd.DataFrame, y: list, client_ids: list, n_trials: int = 100)
             X_tr, X_val = X_train.iloc[train_idx], X_train.iloc[val_idx]
             y_tr, y_val = y_train[train_idx], y_train[val_idx]
 
-            dtrain = lgb.Dataset(X_tr, label=y_tr)
-            dvalid = lgb.Dataset(X_val, label=y_val)
+            dtrain = lgb.Dataset(X_tr, label=y_tr, categorical_feature=categorical_features)
+            dvalid = lgb.Dataset(X_val, label=y_val, categorical_feature=categorical_features)
 
             model = lgb.train(
                 params,
@@ -122,8 +131,10 @@ def train_model(X: pd.DataFrame, y: list, client_ids: list, n_trials: int = 100)
                 valid_sets=[dvalid],
                 valid_names=['valid'],
                 num_boost_round=10000,
-                early_stopping_rounds=100,
-                verbose_eval=100
+                callbacks=[
+                    lgb.early_stopping(stopping_rounds=100),
+                    lgb.log_evaluation(period=100)
+                ]
             )
 
             preds = model.predict(X_val, num_iteration=model.best_iteration)
@@ -135,8 +146,7 @@ def train_model(X: pd.DataFrame, y: list, client_ids: list, n_trials: int = 100)
     study = optuna.create_study(direction="minimize")
     study.optimize(objective, n_trials=n_trials)
 
-    log.info(f"Best trial: RMSE = {study.best_value:.5f}")
-    log.info(f"Best params: {study.best_params}")
+    log.info("Best trial", rmse=study.best_value, params=study.best_params)
 
     best_params = study.best_params
     best_params.update({
@@ -147,15 +157,16 @@ def train_model(X: pd.DataFrame, y: list, client_ids: list, n_trials: int = 100)
         'seed': 42
     })
 
-    # Train N_SPLITS models for ensembling
+    # Train ensemble
     models = []
     gkf = GroupKFold(n_splits=N_SPLITS)
 
     for fold, (train_idx, val_idx) in enumerate(gkf.split(X_train, y_train, groups=client_ids_train)):
-        X_tr, _ = X_train.iloc[train_idx], X_train.iloc[val_idx]
-        y_tr, _ = y_train[train_idx], y_train[val_idx]
+        X_tr = X_train.iloc[train_idx]
+        y_tr = y_train[train_idx]
 
-        dtrain_full = lgb.Dataset(X_tr, label=y_tr)
+        dtrain_full = lgb.Dataset(X_tr, label=y_tr, categorical_feature=categorical_features)
+
         model = lgb.train(
             best_params,
             dtrain_full,
@@ -164,29 +175,43 @@ def train_model(X: pd.DataFrame, y: list, client_ids: list, n_trials: int = 100)
 
         models.append(model)
 
-        model_path = MODEL_DIR / f"model_fold{fold}.txt"
-        model.save_model(str(model_path))
-        log.info(f"Saved fold model {fold}", path=str(model_path))
+    # Save ensemble as one object
+    if save_models:
+        timestamp = datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
+        models_path = MODEL_DIR / f"ensemble_models_{timestamp}.pkl"
+        joblib.dump(models, models_path)
+        log.info("Saved ensemble models", path=str(models_path))
 
-    # Evaluate ensemble on test set
+    # Evaluate ensemble
     preds = np.mean([model.predict(X_test) for model in models], axis=0)
     test_rmse = mean_squared_error(y_test, preds, squared=False)
-    log.info(f"Test RMSE (ensemble): {test_rmse:.5f}")
+    log.info("Test RMSE (ensemble)", test_rmse=test_rmse)
 
     # Save Optuna study
-    timestamp = datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
     study_path = MODEL_DIR / f"optuna_study_{timestamp}.pkl"
     joblib.dump(study, study_path)
 
     log.info("Training complete.")
 
-def main() -> None:
+
+def predict_ensemble(models: List[lgb.Booster], X_new: pd.DataFrame) -> np.ndarray:
+    preds = np.mean([model.predict(X_new, num_iteration=model.best_iteration) for model in models], axis=0)
+    return preds
+
+
+def load_models(models_path: Path) -> List[lgb.Booster]:
+    return joblib.load(models_path)
+
+
+def main(n_trials: int = 100) -> None:
     clients, therapists, matches = fetch_data()
     X_train, y_train, client_ids = build_training_data(matches, clients, therapists)
+
     if not X_train.empty and y_train:
-        train_model(X_train, y_train, client_ids)
+        train_model(X_train, y_train, client_ids, n_trials=n_trials)
     else:
         log.error("No valid training data found.")
+
 
 if __name__ == "__main__":
     try:
