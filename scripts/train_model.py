@@ -150,14 +150,14 @@ def train_model(
     study = optuna.create_study(direction="minimize")
 
     if show_progress:
-        total_folds = N_SPLITS * n_trials
-        fold_counter = 0
-
-        for trial in range(n_trials):
+        total_trials = n_trials
+        trial_counter = 0
+        
+        for _ in range(n_trials):
             study.optimize(objective, n_trials=1)
-
-            fold_counter += 1
-            progress = (fold_counter / total_folds) * 100
+        
+            trial_counter += 1
+            progress = (trial_counter / total_trials) * 100
             log.info(f"Training progress: {int(progress)}%")
 
     else:
@@ -201,7 +201,7 @@ def train_model(
 
     # Evaluate ensemble
     preds = np.mean([model.predict(X_test) for model in models], axis=0)
-    test_rmse = root_mean_squared_error(y_test, preds, squared=False)
+    test_rmse = root_mean_squared_error(y_test, preds)
     log.info("Test RMSE (ensemble)", test_rmse=test_rmse)
 
     # Save Optuna study
