@@ -224,8 +224,9 @@ async def admin_setup_training_data():
     setup_training_data()
     return {"status": "setup complete"}
 
-@app.post("/admin/train-model")
+@router.post("/admin/train-model")
 async def admin_train_model(background_tasks: BackgroundTasks):
+    training_status["status"] = "training"  # update status bij start
     background_tasks.add_task(train_model_main)
     return {"status": "Training started"}
 
