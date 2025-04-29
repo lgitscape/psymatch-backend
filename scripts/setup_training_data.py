@@ -82,8 +82,8 @@ def generate_fake_clients(n=50):
 
     print(f"Uploaden van {len(clients)} clients naar test_clients…")
     resp = supabase.table("test_clients").insert(clients).execute()
-    if resp.status_code >= 400:
-        raise RuntimeError(f"Failed to insert clients: {resp.data}")
+    if resp.error:
+        raise RuntimeError(f"Failed to insert clients: {resp.error}")
     print("Clients succesvol geüpload.")
 
     return clients
@@ -176,8 +176,8 @@ def generate_and_upload_matches(clients, therapists, n_matches=2500):
     for i in range(0, len(records), chunk_size):
         batch = records[i : i + chunk_size]
         resp  = supabase.table("test_training_data").insert(batch).execute()
-        if resp.status_code >= 400:
-            raise RuntimeError(f"Failed to insert training_data batch: {resp.data}")
+        if resp.error:
+            raise RuntimeError(f"Failed to insert training_data batch: {resp.error}")
         time.sleep(0.5)
     print("Match records succesvol geüpload.")
 
