@@ -15,12 +15,13 @@ def generate_fake_therapists(n=50):
     styles         = ["Warm", "Direct", "Reflectief", "Praktisch"]
     timeslots_pool = ["ochtend", "middag", "avond"]
     genders        = ["Vrouw", "Man", None]
+    setting        = ["Fysiek", "Online", "Geen voorkeur"]
 
     therapists = []
     for _ in range(n):
         th = {
             "id": str(uuid.uuid4()),
-            "setting": "online",
+            "setting": random.choice(setting),
             "topics": random.sample(topics_pool, k=random.randint(1, 3)),
             "client_groups": ["Volwassenen"],
             "style": random.choice(styles),
@@ -37,7 +38,7 @@ def generate_fake_therapists(n=50):
 
     print(f"Uploaden van {len(therapists)} therapists naar test_therapists…")
     resp = supabase.table("test_therapists").insert(therapists).execute()
-    if resp.status_code >= 400:
+    if resp.response.status_code >= 400:
         raise RuntimeError(f"Failed to insert therapists: {resp.data}")
     print("Therapists succesvol geüpload.")
 
@@ -52,15 +53,16 @@ def generate_fake_clients(n=50):
     timeslots_pool = ["ochtend", "middag", "avond"]
     client_groups_pool = ["Kinderen", "Adolescenten", "Volwassenen", "Ouderen"]
     languages_pool = ["nl", "en"]
-    genders = ["Man", "Vrouw", None]
-    expat_status = [True, False]
+    genders        = ["Man", "Vrouw", None]
+    setting        = ["Fysiek", "Online", "Geen voorkeur"]
+    expat_status   = [True, False]
     lgbtqia_status = [True, False]
 
     clients = []
     for _ in range(n):
         cl = {
             "id": str(uuid.uuid4()),
-            "setting": "online",
+            "setting": random.choice(setting),
             "max_km": random.choice([10, 25, 50]),
             "topics": random.sample(topics_pool, k=random.randint(1, 2)),
             "topic_weights": {topic: random.randint(1, 3) for topic in random.sample(topics_pool, k=random.randint(1, 2))},
@@ -82,7 +84,7 @@ def generate_fake_clients(n=50):
 
     print(f"Uploaden van {len(clients)} clients naar test_clients…")
     resp = supabase.table("test_clients").insert(clients).execute()
-    if resp.status_code >= 400:
+    if resp.response.status_code >= 400:
         raise RuntimeError(f"Failed to insert clients: {resp.data}")
     print("Clients succesvol geüpload.")
 
@@ -176,7 +178,7 @@ def generate_and_upload_matches(clients, therapists, n_matches=2500):
     for i in range(0, len(records), chunk_size):
         batch = records[i : i + chunk_size]
         resp  = supabase.table("test_training_data").insert(batch).execute()
-        if resp.status_code >= 400:
+        if resp.response.status_code >= 400:
             raise RuntimeError(f"Failed to insert training_data batch: {resp.data}")
         time.sleep(0.5)
     print("Match records succesvol geüpload.")
