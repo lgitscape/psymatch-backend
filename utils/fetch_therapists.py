@@ -29,7 +29,7 @@ async def fetch_therapists(retries: int = 3, delay: float = 2.0) -> List[Therapi
     for attempt in range(retries):
         try:
             log.info(f"Fetching therapists (attempt {attempt+1})")
-            response = supabase.table("therapists").select("*").execute()
+            response = supabase.table("test_therapists").select("*").execute()
 
             if not response.data:
                 log.warning("No therapists found in Supabase.")
