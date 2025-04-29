@@ -1,3 +1,4 @@
+
 # scripts/train_model.py
 # Final production-quality version: Train one universal LightGBM LambdaRank model
 # - Predicts final_score
@@ -106,8 +107,10 @@ def train_model(X_train: pd.DataFrame, y_train: list, groups: list) -> None:
         valid_sets=[lgb_train, lgb_valid],
         valid_names=["train", "valid"],
         num_boost_round=500,
-        callbacks=[lgb.early_stopping(20)],
-        verbose_eval=50  # ➔ every 50 rounds show metrics
+        callbacks=[
+            lgb.early_stopping(20),
+            lgb.log_evaluation(50)  # ➔ elke 50 rondes loggen
+        ]
     )
 
     timestamp = datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
