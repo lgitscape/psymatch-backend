@@ -14,6 +14,7 @@ from supabase_client import supabase
 import structlog
 from datetime import datetime
 from sklearn.model_selection import train_test_split
+from types import SimpleNamespace
 
 log = structlog.get_logger()
 
@@ -57,11 +58,8 @@ def build_training_data(matches: pd.DataFrame, clients: pd.DataFrame, therapists
             if therapist_data is None:
                 continue
 
-            # Build feature vector
-            class C: pass
-            class T: pass
-            C.__dict__.update(client_data)
-            T.__dict__.update(therapist_data)
+            c = SimpleNamespace(**client_data)
+            t = SimpleNamespace(**therapist_data)
 
             fv = build_feature_vector(C, T)
 
