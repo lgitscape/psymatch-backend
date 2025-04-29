@@ -1,4 +1,4 @@
-# 📦 scripts/train_model.py
+# scripts/train_model.py
 # Final production-quality version: Train one universal LightGBM LambdaRank model
 # - Predicts final_score
 # - Uses initial_score as an input feature
@@ -61,7 +61,7 @@ def build_training_data(matches: pd.DataFrame, clients: pd.DataFrame, therapists
             c = SimpleNamespace(**client_data)
             t = SimpleNamespace(**therapist_data)
 
-            fv = build_feature_vector(C, T)
+            fv = build_feature_vector(c, t)
 
             # Add initial_score as additional feature
             initial_score = match.get("initial_score", 5) / 10.0  # Normalize
@@ -69,12 +69,12 @@ def build_training_data(matches: pd.DataFrame, clients: pd.DataFrame, therapists
 
             feature_rows.append(list(fv.values()))
 
-            try:
-                final_score = float(match.get("final_score", 5)) / 10.0  # Normalize
-                labels.append(final_score)
+            final_score = match.get("final_score")
+            if final_score is not None:
+                labels.append(float(final_score) / 10.0)
                 group_size += 1
-            except Exception as e:
-                log.warning("Skipping match with missing final_score", client_id=client_id, error=str(e))
+            else:
+                log.warning("Skipping match with missing final_score", client_id=client_id)
 
         if group_size > 0:
             groups.append(group_size)
@@ -107,7 +107,7 @@ def train_model(X_train: pd.DataFrame, y_train: list, groups: list) -> None:
         valid_names=["train", "valid"],
         num_boost_round=500,
         early_stopping_rounds=20,
-        verbose_eval=50  # ➔ every 50 rounds show metrics
+        verbose_eval=50  # every 50 rounds show metrics
     )
 
     timestamp = datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
