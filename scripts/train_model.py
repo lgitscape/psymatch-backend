@@ -1,209 +1,134 @@
-# scripts/setup_training_data.py
 
-import random
-import uuid
-import time
+# scripts/train_model.py
+# Final production-quality version: Train one universal LightGBM LambdaRank model
+# - Predicts final_score
+# - Uses initial_score as an input feature
+# - Ignores rank_in_top
 
-from supabase_client import supabase
+import pandas as pd
+import lightgbm as lgb
+import os
+from pathlib import Path
+from typing import Tuple, Dict
 from engine.features import build_feature_vector
+from supabase_client import supabase
+import structlog
+from datetime import datetime
+from sklearn.model_selection import train_test_split
+from types import SimpleNamespace
 
-# ───────────────────────────────────────────────────────────────────────────
-# Stap A: 50 fake therapists genereren en uploaden naar test_therapists
-# ───────────────────────────────────────────────────────────────────────────
-def generate_fake_therapists(n=50):
-    topics_pool    = ["stress", "depressie", "angst", "relatie", "verlies"]
-    styles         = ["Warm", "Direct", "Reflectief", "Praktisch"]
-    timeslots_pool = ["ochtend", "middag", "avond"]
-    genders        = ["Vrouw", "Man", "Anders"]
-    setting        = ["Fysiek", "Online", "Geen voorkeur"]
+log = structlog.get_logger()
 
-    therapists = []
-    for _ in range(n):
-        th = {
-            "id": str(uuid.uuid4()),
-            "setting": random.choice(setting),
-            "topics": random.sample(topics_pool, k=random.randint(1, 3)),
-            "client_groups": ["Volwassenen"],
-            "style": random.choice(styles),
-            "therapist_goals": ["stabiliseren"],
-            "languages": ["nl"],
-            "timeslots": random.sample(timeslots_pool, k=random.randint(1, 2)),
-            "fee": round(random.uniform(50, 150), 2),
-            "contract_with_insurer": random.choice([True, False]),
-            "gender_pref": random.choice(genders),
-            "lat": 52.0 + random.uniform(-0.5, 0.5),
-            "lon": 4.0  + random.uniform(-0.5, 0.5),
-        }
-        therapists.append(th)
+# Settings
+MODEL_DIR = Path("models/")
 
-    print(f"Uploaden van {len(therapists)} therapists naar test_therapists…")
-    resp = supabase.table("test_therapists").insert(therapists).execute()
-    if not resp.data:
-        raise RuntimeError(f"Failed to insert therapists: {resp.data}")
-    print("Therapists succesvol geüpload.")
+# Ensure models/ folder exists
+MODEL_DIR.mkdir(parents=True, exist_ok=True)
 
-    return therapists
+def fetch_data() -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    try:
+        clients_resp = supabase.table("test_clients").select("*").execute()
+        therapists_resp = supabase.table("test_therapists").select("*").execute()
+        matches_resp = supabase.table("test_training_data").select("*").execute()
 
-# ───────────────────────────────────────────────────────────────────────────
-# Stap B: 50 fake clients genereren en uploaden naar test_clients
-# ───────────────────────────────────────────────────────────────────────────
-def generate_fake_clients(n=50):
-    topics_pool    = ["stress", "depressie", "angst", "relatie", "verlies"]
-    styles         = ["Warm", "Direct", "Reflectief", "Praktisch"]
-    timeslots_pool = ["ochtend", "middag", "avond"]
-    client_groups_pool = ["Kinderen", "Adolescenten", "Volwassenen", "Ouderen"]
-    languages_pool = ["nl", "en"]
-    genders        = ["Man", "Vrouw", None]
-    setting        = ["Fysiek", "Online", "Geen voorkeur"]
-    expat_status   = [True, False]
-    lgbtqia_status = [True, False]
+        clients = pd.DataFrame(clients_resp.data)
+        therapists = pd.DataFrame(therapists_resp.data)
+        matches = pd.DataFrame(matches_resp.data)
 
-    clients = []
-    for _ in range(n):
-        cl = {
-            "id": str(uuid.uuid4()),
-            "setting": random.choice(setting),
-            "max_km": random.choice([10, 25, 50]),
-            "topics": random.sample(topics_pool, k=random.randint(1, 3)),
-            "topic_weights": {topic: random.randint(1, 5) for topic in random.sample(topics_pool, k=random.randint(1, 3))},
-            "style_pref": random.choice(styles),
-            "style_weight": random.randint(1, 5),
-            "gender_pref": random.choice(genders),
-            "therapy_goals": ["stabiliseren"],
-            "client_traits": random.sample(client_groups_pool, k=1),
-            "languages": random.sample(languages_pool, k=1),
-            "timeslots": random.sample(timeslots_pool, k=random.randint(1, 2)),
-            "budget": round(random.uniform(60, 120), 2),
-            "severity": random.randint(1, 5),
-            "lat": 52.0 + random.uniform(-0.5, 0.5),
-            "lon": 4.0 + random.uniform(-0.5, 0.5),
-            "expat": random.choice(expat_status),
-            "lgbtqia": random.choice(lgbtqia_status),
-        }
-        clients.append(cl)
+        return clients, therapists, matches
+    except Exception as e:
+        log.error("Failed to fetch data", error=str(e))
+        raise
 
-    print(f"Uploaden van {len(clients)} clients naar test_clients…")
-    resp = supabase.table("test_clients").insert(clients).execute()
-    if not resp.data:
-        raise RuntimeError(f"Failed to insert clients: {resp.data}")
-    print("Clients succesvol geüpload.")
+def build_training_data(matches: pd.DataFrame, clients: pd.DataFrame, therapists: pd.DataFrame) -> Tuple[pd.DataFrame, list, list]:
+    feature_rows = []
+    labels = []
+    groups = []
 
-    return clients
+    id2client = {row["id"]: row for _, row in clients.iterrows()}
+    id2therapist = {row["id"]: row for _, row in therapists.iterrows()}
 
-# ───────────────────────────────────────────────────────────────────────────
-# Stap C: 2500 matches genereren tussen clients en therapists
-# ───────────────────────────────────────────────────────────────────────────
-def generate_and_upload_matches(clients, therapists, n_matches_expected):
-    records = []
-    seen_pairs = set()
+    for client_id, group in matches.groupby("client_id"):
+        client_data = id2client.get(client_id)
+        if client_data is None:
+            continue
+        group_size = 0
 
-    print(f"Start matching {len(clients)} clients to 1 therapist each...")
+        for _, match in group.iterrows():
+            therapist_data = id2therapist.get(match["therapist_id"])
+            if therapist_data is None:
+                continue
 
-    for idx, client in enumerate(clients, start=1):
-        therapist_scores = []
-        for therapist in therapists:
-            overlap = len(set(client["topics"]) & set(therapist["topics"]))
-            therapist_scores.append((therapist, overlap))
+            c = SimpleNamespace(**client_data)
+            t = SimpleNamespace(**therapist_data)
 
-        therapist_scores.sort(key=lambda x: x[1], reverse=True)
+            fv = build_feature_vector(c, t)
 
-        top_choices = [th for th, score in therapist_scores[:50] if score > 0]
-        if not top_choices:
-            top_choices = [therapist for therapist, _ in therapist_scores]
+            # Add initial_score as additional feature
+            initial_score = match.get("initial_score", 5) / 10.0  # Normalize
+            fv["initial_score"] = initial_score
 
-        # Weighted keuze uit top 5 (of meer als minder beschikbaar)
-        choice_weights = [0.7, 0.2, 0.07, 0.02, 0.01] + [0] * (len(top_choices) - 5)
-        therapist = random.choices(top_choices, weights=choice_weights[:len(top_choices)])[0]
+            feature_rows.append(list(fv.values()))
 
-        pair = (client["id"], therapist["id"])
-        if pair in seen_pairs:
-            continue  # Zeer zeldzaam maar veilig
-        seen_pairs.add(pair)
+            final_score = match.get("final_score")
+            if final_score is not None:
+                labels.append(float(final_score) / 10.0)
+                group_size += 1
+            else:
+                log.warning("Skipping match with missing final_score", client_id=client_id)
 
-        # Dummy Client en Therapist objecten
-        class C:
-            client_id     = client["id"]
-            setting       = client["setting"]
-            max_km        = client["max_km"]
-            topics        = client["topics"]
-            topic_weights = client["topic_weights"]
-            style_pref    = client["style_pref"]
-            style_weight  = client["style_weight"]
-            gender_pref   = client["gender_pref"]
-            therapy_goals = client["therapy_goals"]
-            client_traits = client["client_traits"]
-            languages     = client["languages"]
-            timeslots     = client["timeslots"]
-            budget        = client["budget"]
-            severity      = client["severity"]
-            lat           = client["lat"]
-            lon           = client["lon"]
+        if group_size > 0:
+            groups.append(group_size)
 
-        class T:
-            id                   = therapist["id"]
-            setting              = therapist["setting"]
-            topics               = therapist["topics"]
-            client_groups        = therapist["client_groups"]
-            style                = therapist["style"]
-            therapist_goals      = therapist["therapist_goals"]
-            languages            = therapist["languages"]
-            timeslots            = therapist["timeslots"]
-            fee                  = therapist["fee"]
-            contract_with_insurer= therapist["contract_with_insurer"]
-            gender_pref          = therapist["gender_pref"]
-            lat                  = therapist["lat"]
-            lon                  = therapist["lon"]
+    return pd.DataFrame(feature_rows), labels, groups
 
-        fv = build_feature_vector(C, T)
+def train_model(X_train: pd.DataFrame, y_train: list, groups: list) -> None:
+    log.info("Starting model training", samples=len(y_train), groups=len(groups))
 
-        rel = (fv["weighted_topic_overlap"] * 2 + fv["style_match"] + fv["language_overlap"]) / 4
-        label = int(rel * 3)
+    # ➔ NEW: split into train/valid
+    X_tr, X_val, y_tr, y_val = train_test_split(X_train, y_train, test_size=0.2, random_state=42)
 
-        # Basis op rel, maar met flinke ruis
-        initial_score = max(1, min(10, round(rel * 6 + random.uniform(-3, 3))))
-        
-        # Simuleer uitkomst: meestal kleine verschillen, af en toe drastisch
-        delta = random.choices(
-            [-3, -2, -1, 0, 1, 2, 3],
-            weights=[0.05, 0.1, 0.25, 0.3, 0.2, 0.08, 0.02]  # meer kleine dan grote verschuivingen
-        )[0]
-        
-        final_score = max(1, min(10, initial_score + delta))
+    lgb_train = lgb.Dataset(X_tr, label=y_tr)
+    lgb_valid = lgb.Dataset(X_val, label=y_val, reference=lgb_train)
 
-        fv["client_id"]     = client["id"]
-        fv["therapist_id"]  = therapist["id"]
-        fv["label"]         = label
-        fv["initial_score"] = initial_score
-        fv["final_score"]   = final_score
-        fv["rank_in_top"]   = 1  # Altijd 1, want gekozen
+    params = {
+        "objective": "lambdarank",
+        "metric": "ndcg",
+        "boosting_type": "gbdt",
+        "learning_rate": 0.05,
+        "num_leaves": 31,
+        "ndcg_eval_at": [5, 10],
+        "verbosity": -1,
+    }
 
-        records.append(fv)
+    model = lgb.train(
+        params,
+        lgb_train,
+        valid_sets=[lgb_train, lgb_valid],
+        valid_names=["train", "valid"],
+        num_boost_round=500,
+        callbacks=[lgb.early_stopping(20)],
+        verbose_eval=50  # ➔ every 50 rounds show metrics
+    )
 
-        if idx % 100 == 0:
-            print(f"Matched {idx}/{len(clients)} clients", flush=True)
+    timestamp = datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
+    model_path = MODEL_DIR / f"model_finalscore_{timestamp}.txt"
+    model.save_model(str(model_path))
 
-    # Upload alle records
-    print(f"Uploaden van {len(records)} match records naar test_training_data…")
-    chunk_size = 500
-    for i in range(0, len(records), chunk_size):
-        batch = records[i:i+chunk_size]
-        resp = supabase.table("test_training_data").insert(batch).execute()
-        if not resp.data:
-            raise RuntimeError(f"Failed to insert training_data batch: {resp.data}")
-        print(f"Uploaded batch {i // chunk_size + 1} ({len(batch)} records)", flush=True)
-        time.sleep(0.5)
+    log.info("Model saved", path=str(model_path))
+    log.info(f"Best iteration: {model.best_iteration}, Best valid NDCG: {model.best_score['valid']['ndcg@10']:.4f}")
 
-    print("Alle {len(records)} match records succesvol geüpload.")
-
-# ───────────────────────────────────────────────────────────────────────────
-# Main
-# ───────────────────────────────────────────────────────────────────────────
-def main():
-    therapists = generate_fake_therapists(200)
-    clients    = generate_fake_clients(2000)
-    generate_and_upload_matches(clients, therapists, 2000)
-    print("Klaar: 200 therapists, 2000 clients en 2000 match records staan in Supabase.")
-
+def main() -> None:
+    clients, therapists, matches = fetch_data()
+    X_train, y_train, groups = build_training_data(matches, clients, therapists)
+    if not X_train.empty and y_train:
+        train_model(X_train, y_train, groups)
+    else:
+        log.error("No valid training data found.")
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception as e:
+        log.error("Training pipeline failed", error=str(e))
+        raise
