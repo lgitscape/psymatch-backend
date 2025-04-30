@@ -11,6 +11,7 @@ shap
 optuna
 tqdm
 requests
+mlflow
 
 # Extra's voor development
 pytest
