@@ -11,6 +11,7 @@ from sklearn.model_selection import GroupKFold, train_test_split
 from sklearn.metrics import root_mean_squared_error
 from types import SimpleNamespace
 import optuna
+from optuna.exceptions import DuplicatedStudyError
 import numpy as np
 import joblib
 import mlflow
@@ -148,13 +149,18 @@ def train_model(
             rmses.append(rmse)
 
         return np.mean(rmses)
-
-    study = optuna.create_study(
-        study_name="psymatch_lgbm_study",
-        direction="minimize",
-        storage="sqlite:///optuna_study.db",
-        load_if_exists=True
-    )
+    try:
+        study = optuna.create_study(
+            study_name="psymatch_lgbm_study",
+            direction="minimize",
+            storage="sqlite:///optuna_study.db",
+            load_if_exists=True
+        )
+    except DuplicatedStudyError:
+        study = optuna.load_study(
+            study_name="psymatch_lgbm_study",
+            storage="sqlite:///optuna_study.db"
+        )
 
     if show_progress:
         total_trials = n_trials
