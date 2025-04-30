@@ -4,6 +4,7 @@ import asyncio
 import structlog
 from typing import List
 from supabase_client import supabase
+import json
 
 log = structlog.get_logger()
 
@@ -24,6 +25,14 @@ class TherapistProfile:
         self.lat = lat
         self.lon = lon
 
+def safe_parse_list(val):
+    if isinstance(val, list):
+        return val
+    try:
+        return json.loads(val)
+    except Exception:
+        return []
+
 async def fetch_therapists(retries: int = 3, delay: float = 2.0) -> List[TherapistProfile]:
     """Fetch therapists from Supabase, with retry logic."""
     for attempt in range(retries):
@@ -40,12 +49,12 @@ async def fetch_therapists(retries: int = 3, delay: float = 2.0) -> List[Therapi
                 therapists.append(TherapistProfile(
                     id=th.get("id"),
                     setting=th.get("setting"),
-                    topics=th.get("topics", []),
-                    client_groups=th.get("client_groups", []),
+                    topics=safe_parse_list(th.get("topics", [])),
+                    client_groups=safe_parse_list(th.get("client_groups", [])),
                     style=th.get("style"),
-                    therapist_goals=th.get("therapist_goals", []),
-                    languages=th.get("languages", []),
-                    timeslots=th.get("timeslots", []),
+                    therapist_goals=safe_parse_list(th.get("therapist_goals", [])),
+                    languages=safe_parse_list(th.get("languages", [])),
+                    timeslots=safe_parse_list(th.get("timeslots", [])),
                     fee=th.get("fee"),
                     contract_with_insurer=th.get("contract_with_insurer"),
                     gender_pref=th.get("gender_pref"),

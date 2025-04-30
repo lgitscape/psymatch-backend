@@ -17,6 +17,24 @@ from pydantic import Field
 log = structlog.get_logger()
 
 # ─────────────────────────────
+# your imports
+import threading
+import time
+import requests
+
+# self-ping function
+def keep_awake(url):
+    while True:
+        try:
+            requests.get(url)
+        except Exception:
+            pass
+        time.sleep(240)  # ping every 4 minutes
+
+# start the self-ping in a background thread
+threading.Thread(target=keep_awake, args=("https://psymatch-backend.onrender.com",), daemon=True).start()
+
+# ─────────────────────────────
 # Settings
 class Settings(BaseSettings):
     app_name: str = "PsyMatch Recommender"
