@@ -10,6 +10,7 @@ lightgbm
 shap
 optuna
 tqdm
+requests
 
 # Extra's voor development
 pytest

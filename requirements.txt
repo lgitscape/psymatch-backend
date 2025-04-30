@@ -10,3 +10,4 @@ lightgbm
 shap
 optuna
 tqdm
+requests
