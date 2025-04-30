@@ -253,7 +253,7 @@ def predict_ensemble(models: List[lgb.Booster], X_new: pd.DataFrame) -> np.ndarr
 def load_models(models_path: Path) -> List[lgb.Booster]:
     return joblib.load(models_path)
 
-def main(n_trials: int = 100) -> None:
+def main(n_trials: int = 5) -> None:
     global training_status
     try:
         training_status["status"] = "running"
