@@ -16,6 +16,7 @@ import numpy as np
 import joblib
 import mlflow
 from mlflow.models.signature import infer_signature
+from sqlalchemy.exc import OperationalError
 
 # Globale statusvariabele
 training_status = {"status": "idle", "progress": 0}
@@ -149,6 +150,7 @@ def train_model(
             rmses.append(rmse)
 
         return np.mean(rmses)
+
     try:
         study = optuna.create_study(
             study_name="psymatch_lgbm_study",
@@ -156,7 +158,8 @@ def train_model(
             storage="sqlite:///optuna_study.db",
             load_if_exists=True
         )
-    except DuplicatedStudyError:
+    except (DuplicatedStudyError, OperationalError) as e:
+        log.warning("Study creation failed, falling back to loading existing study", error=str(e))
         study = optuna.load_study(
             study_name="psymatch_lgbm_study",
             storage="sqlite:///optuna_study.db"
@@ -253,7 +256,7 @@ def predict_ensemble(models: List[lgb.Booster], X_new: pd.DataFrame) -> np.ndarr
 def load_models(models_path: Path) -> List[lgb.Booster]:
     return joblib.load(models_path)
 
-def main(n_trials: int = 5) -> None:
+def main(n_trials: int = 100) -> None:
     global training_status
     try:
         training_status["status"] = "running"
