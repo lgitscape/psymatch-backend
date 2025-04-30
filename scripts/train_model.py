@@ -17,6 +17,7 @@ import joblib
 import mlflow
 from mlflow.models.signature import infer_signature
 from sqlalchemy.exc import OperationalError
+from filelock import FileLock
 
 # Globale statusvariabele
 training_status = {"status": "idle", "progress": 0}
@@ -151,19 +152,20 @@ def train_model(
 
         return np.mean(rmses)
 
-    try:
-        study = optuna.create_study(
-            study_name="psymatch_lgbm_study",
-            direction="minimize",
-            storage="sqlite:///optuna_study.db",
-            load_if_exists=True
-        )
-    except (DuplicatedStudyError, OperationalError) as e:
-        log.warning("Study creation failed, falling back to loading existing study", error=str(e))
-        study = optuna.load_study(
-            study_name="psymatch_lgbm_study",
-            storage="sqlite:///optuna_study.db"
-        )
+    with FileLock("optuna.lock"):
+        try:
+            study = optuna.create_study(
+                study_name="psymatch_lgbm_study",
+                direction="minimize",
+                storage="sqlite:///optuna_study.db",
+                load_if_exists=True
+            )
+        except (DuplicatedStudyError, OperationalError) as e:
+            log.warning("Study creation failed, falling back to loading existing study", error=str(e))
+            study = optuna.load_study(
+                study_name="psymatch_lgbm_study",
+                storage="sqlite:///optuna_study.db"
+            )
 
     if show_progress:
         total_trials = n_trials
