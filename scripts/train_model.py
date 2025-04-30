@@ -13,6 +13,8 @@ from types import SimpleNamespace
 import optuna
 import numpy as np
 import joblib
+import mlflow
+from mlflow.models.signature import infer_signature
 
 # Globale statusvariabele
 training_status = {"status": "idle", "progress": 0}
@@ -26,7 +28,6 @@ MODEL_DIR.mkdir(parents=True, exist_ok=True)
 N_SPLITS = 5
 TEST_SIZE = 0.1
 CATEGORICAL_COLUMNS = ["item_category_1", "item_category_2", "item_category_3"]  # Example categorical features
-
 
 def fetch_data() -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     try:
@@ -42,7 +43,6 @@ def fetch_data() -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     except Exception as e:
         log.error("Failed to fetch data", error=str(e))
         raise
-
 
 def build_training_data(matches: pd.DataFrame, clients: pd.DataFrame, therapists: pd.DataFrame) -> Tuple[pd.DataFrame, list, list]:
     feature_rows = []
@@ -84,7 +84,6 @@ def build_training_data(matches: pd.DataFrame, clients: pd.DataFrame, therapists
             df[col] = df[col].astype("category")
 
     return df, labels, client_ids
-
 
 def train_model(
     X: pd.DataFrame,
@@ -153,10 +152,9 @@ def train_model(
     study = optuna.create_study(
         study_name="psymatch_lgbm_study",
         direction="minimize",
-        storage="sqlite:///optuna_study.db",  # Or a full Postgres URI in production
+        storage="sqlite:///optuna_study.db",
         load_if_exists=True
     )
-
 
     if show_progress:
         total_trials = n_trials
@@ -200,30 +198,54 @@ def train_model(
 
         models.append(model)
 
+    timestamp = datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
+
     if save_models:
-        timestamp = datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
         models_path = MODEL_DIR / f"ensemble_models_{timestamp}.pkl"
         joblib.dump(models, models_path)
         log.info("Saved ensemble models", path=str(models_path))
+        try:
+            mlflow.set_experiment("psymatch_training")
+            with mlflow.start_run(run_name=f"train_{timestamp}") as run:
+                preds = np.mean([model.predict(X_test) for model in models], axis=0)
+                test_rmse = root_mean_squared_error(y_test, preds)
 
-    preds = np.mean([model.predict(X_test) for model in models], axis=0)
-    test_rmse = root_mean_squared_error(y_test, preds)
-    log.info("Test RMSE (ensemble)", test_rmse=test_rmse)
+                mlflow.log_metric("test_rmse", test_rmse)
+                for k, v in best_params.items():
+                    mlflow.log_param(k, v)
+
+                # Optional but useful for model serving
+                signature = infer_signature(X_train, y_train)
+
+                mlflow.log_artifact(str(models_path), artifact_path="model")
+                model_uri = f"runs:/{run.info.run_id}/model/{models_path.name}"
+                mv = mlflow.register_model(model_uri=model_uri, name="psymatch_ranker")
+                log.info("Model registered in MLflow", uri=model_uri)
+
+                # Promote to production
+                client = mlflow.tracking.MlflowClient()
+                client.transition_model_version_stage(
+                    name="psymatch_ranker",
+                    version=mv.version,
+                    stage="Production",
+                    archive_existing_versions=True
+                )
+                log.info("Model promoted to Production", version=mv.version)
+
+        except Exception as e:
+            log.warning("MLflow registration failed", error=str(e))
+
 
     study_path = MODEL_DIR / f"optuna_study_{timestamp}.pkl"
     joblib.dump(study, study_path)
-
     log.info("Training complete.")
-
 
 def predict_ensemble(models: List[lgb.Booster], X_new: pd.DataFrame) -> np.ndarray:
     preds = np.mean([model.predict(X_new, num_iteration=model.best_iteration) for model in models], axis=0)
     return preds
 
-
 def load_models(models_path: Path) -> List[lgb.Booster]:
     return joblib.load(models_path)
-
 
 def main(n_trials: int = 100) -> None:
     global training_status
@@ -245,7 +267,6 @@ def main(n_trials: int = 100) -> None:
         training_status["progress"] = 0
         log.error("Training pipeline failed", error=str(e))
         raise
-
 
 if __name__ == "__main__":
     main()
